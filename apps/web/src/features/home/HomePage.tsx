@@ -29,12 +29,10 @@ export function HomePage() {
 
       <ConfigNotice />
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <ActionTile to={appRoutes.inbound} title="进卡板" subtitle="3 步录入卡板、物料、批次" tone="soft" />
         <ActionTile to={appRoutes.outbound} title="出卡板" subtitle="按生产年月自动给出 FIFO 建议" tone="soft" />
         <ActionTile to={appRoutes.cycleCount} title="盘点" subtitle="从卡板开始核对系统数量与实际数量" tone="soft" />
-        <ActionTile to={appRoutes.operationLogs} title="操作记录" subtitle="查进库、出库、盘点、清空历史" tone="soft" />
-        <ActionTile to={appRoutes.inventoryExport} title="数据导出" subtitle="一键导出当前所有卡板在库明细 Excel" tone="soft" />
       </section>
     </div>
   );
