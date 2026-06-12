@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import { ConfigNotice } from "@/components/feedback/ConfigNotice";
 import { EmptyState } from "@/components/feedback/EmptyState";
@@ -10,12 +10,13 @@ import {
   validateMaterialsCsv,
   validateMaterialsMatrix,
 } from "@/lib/csv/import-validation";
+import { decodeImportFile } from "@/lib/csv/decode-import-file";
 import { resolveErrorMessage } from "@/lib/api/errors";
-import { commitBarcodeAliasImport, commitMaterialImport } from "@/services/import/master-data-import-service";
-import { listRecentImportRuns } from "@/services/import/import-history-service";
-import { isSupabaseConfigured } from "@/services/supabase/client";
 import { formatDateTime } from "@/lib/formatters/date";
 import { readImportWorkbook } from "@/lib/spreadsheet/import-workbook";
+import { listRecentImportRuns } from "@/services/import/import-history-service";
+import { commitBarcodeAliasImport, commitMaterialImport } from "@/services/import/master-data-import-service";
+import { isSupabaseConfigured } from "@/services/supabase/client";
 import type {
   BarcodeAliasImportRow,
   ImportMode,
@@ -32,12 +33,12 @@ type PreviewState =
 const modeCopy: Record<ImportMode, { title: string; description: string; required: string }> = {
   materials: {
     title: "物料主数据",
-    description: "导入 material_code、short_code、description 等主数据。空白字段不会覆盖已存在值。",
+    description: "导入 material_code、short_code、description 等基础主数据。空白字段不会覆盖已有值。",
     required: "必需列：material_code",
   },
   barcode_aliases: {
     title: "条码映射",
-    description: "导入 barcode 到 material_code 的映射。同一物料可以有多个条码。",
+    description: "导入 barcode 到 material_code 的映射。同一个物料可以绑定多个条码。",
     required: "必需列：barcode、material_code",
   },
 };
@@ -48,10 +49,12 @@ export function MasterDataImportPage() {
   const [sourceFileName, setSourceFileName] = useState("");
   const [sourceText, setSourceText] = useState("");
   const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [sourceEncoding, setSourceEncoding] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState>(null);
   const [importRuns, setImportRuns] = useState<MasterDataImportRun[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -93,43 +96,45 @@ export function MasterDataImportPage() {
     setSourceFile(file);
 
     if (file.name.toLowerCase().endsWith(".xlsx")) {
+      setSourceEncoding(null);
       setSourceText("");
       setMessage(`已载入 Excel 文件：${file.name}。点击“预校验并生成预览”后会读取 ${mode === "materials" ? "materials" : "barcode_aliases"} 工作表。`);
       return;
     }
 
-    const text = await file.text();
-    setSourceText(text);
-    setMessage(`已载入文件：${file.name}`);
+    const decoded = await decodeImportFile(file);
+    setSourceEncoding(decoded.encoding);
+    setSourceText(decoded.text);
+    setMessage(`已载入文件：${file.name}（自动识别为 ${decoded.encoding} 编码）。`);
   }
 
-  function handlePreview() {
+  async function handlePreview() {
     setError(null);
     setMessage(null);
+    setPreviewing(true);
 
-    startTransition(() => {
+    try {
       if (sourceFile && sourceFile.name.toLowerCase().endsWith(".xlsx")) {
-        readImportWorkbook(sourceFile, mode)
-          .then((matrix) => {
-            const nextPreview = mode === "materials" ? validateMaterialsMatrix(matrix) : validateBarcodeAliasesMatrix(matrix);
-            setPreview(nextPreview);
-          })
-          .catch((reason) => {
-            setPreview(null);
-            setError(resolveErrorMessage(reason));
-          });
+        const matrix = await readImportWorkbook(sourceFile, mode);
+        const nextPreview = mode === "materials" ? validateMaterialsMatrix(matrix) : validateBarcodeAliasesMatrix(matrix);
+        setPreview(nextPreview);
         return;
       }
 
       if (!sourceText.trim()) {
-        setError("请先上传 Excel / CSV 文件，或者把 CSV 内容粘贴到文本框。");
         setPreview(null);
+        setError("请先上传 Excel / CSV 文件，或者把 CSV 内容粘贴到文本框。");
         return;
       }
 
       const nextPreview = mode === "materials" ? validateMaterialsCsv(sourceText) : validateBarcodeAliasesCsv(sourceText);
       setPreview(nextPreview);
-    });
+    } catch (reason) {
+      setPreview(null);
+      setError(resolveErrorMessage(reason));
+    } finally {
+      setPreviewing(false);
+    }
   }
 
   async function handleCommit() {
@@ -152,9 +157,7 @@ export function MasterDataImportPage() {
           ? await commitMaterialImport(preview.validRows as MaterialImportRow[], sourceFileName, operatorName)
           : await commitBarcodeAliasImport(preview.validRows as BarcodeAliasImportRow[], sourceFileName, operatorName);
 
-      setMessage(
-        `导入完成：处理 ${result.processed_count} 行，新增 ${result.created_count} 行，更新 ${result.updated_count} 行。`,
-      );
+      setMessage(`导入完成：处理 ${result.processed_count} 行，新增 ${result.created_count} 行，更新 ${result.updated_count} 行。`);
       await loadImportRuns();
     } catch (reason) {
       setError(resolveErrorMessage(reason));
@@ -173,7 +176,7 @@ export function MasterDataImportPage() {
   useEffect(() => {
     if (isSupabaseConfigured) {
       loadImportRuns().catch(() => {
-        // handled in loader
+        // handled inside loadImportRuns
       });
     }
   }, []);
@@ -226,6 +229,9 @@ export function MasterDataImportPage() {
           <p className="mt-2">
             现在页面已经支持两种入口：直接上传 `.xlsx` 模板，或者上传 / 粘贴 CSV。Excel 会按当前模式读取对应工作表。
           </p>
+          <p className="mt-2">
+            如果你的 CSV 来自 Excel，系统会自动识别 `UTF-8`、`GB18030` 或 `GBK` 编码，减少中文和特殊符号乱码问题。
+          </p>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
@@ -250,8 +256,14 @@ export function MasterDataImportPage() {
               />
             </label>
 
-            <button type="button" onClick={handlePreview} className="pf-button-secondary w-full">
-              预校验并生成预览
+            {sourceFileName && sourceEncoding ? (
+              <div className="rounded-[1.4rem] bg-white/80 px-4 py-3 text-sm text-slate-600">
+                已识别编码：<span className="font-semibold text-ink">{sourceEncoding}</span>
+              </div>
+            ) : null}
+
+            <button type="button" onClick={handlePreview} disabled={previewing} className="pf-button-secondary w-full">
+              {previewing ? "正在预校验..." : "预校验并生成预览"}
             </button>
           </div>
 
@@ -261,6 +273,7 @@ export function MasterDataImportPage() {
               value={sourceText}
               onChange={(event) => {
                 setSourceFile(null);
+                setSourceEncoding(null);
                 setSourceText(event.target.value);
               }}
               className="pf-input min-h-64"
@@ -340,7 +353,7 @@ export function MasterDataImportPage() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-2xl font-semibold text-ink">最近导入记录</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">用来追踪谁在什么时候导了主数据，以及本次是新增还是更新。</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">用来追踪谁在什么时间导入了主数据，以及本次是新增还是更新。</p>
           </div>
           <button type="button" onClick={() => loadImportRuns()} className="pf-button-secondary">
             刷新记录
