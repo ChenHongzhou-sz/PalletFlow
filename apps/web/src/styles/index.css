@@ -24,6 +24,13 @@ body {
   margin: 0;
 }
 
+.pf-touch-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
 .pf-scanner-preview,
 .pf-scanner-preview > div,
 .pf-scanner-preview video,

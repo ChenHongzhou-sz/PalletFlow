@@ -126,13 +126,13 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 px-4 pb-4 pt-10 sm:items-center"
+      className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/65 px-3 py-3 sm:px-4 sm:py-6"
       role="presentation"
       onClick={onClose}
       onKeyDown={handleOverlayKeyDown}
     >
       <section
-        className="w-full max-w-md rounded-[2rem] bg-white p-4 shadow-2xl"
+        className="pf-touch-scroll mx-auto flex min-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col rounded-[2rem] bg-white p-4 shadow-2xl sm:min-h-0 sm:max-h-[calc(100dvh-3rem)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -155,7 +155,7 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
           </button>
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-[1.75rem] bg-slate-950">
+        <div className="mt-4 shrink-0 overflow-hidden rounded-[1.75rem] bg-slate-950">
           <div className="relative aspect-[3/4] w-full bg-slate-900">
             <div ref={previewRef} className="pf-scanner-preview h-full w-full" />
             {!error ? (
