@@ -16,7 +16,7 @@ type ImportRunRow = {
 export async function listRecentImportRuns() {
   const db = requireSupabase();
   const { data, error } = await db
-    .from("master_data_import_runs")
+    .from("v_master_data_import_runs")
     .select("id, import_type, source_file_name, operator_name, processed_rows, created_rows, updated_rows, rejected_rows, created_at")
     .order("created_at", { ascending: false })
     .limit(12);

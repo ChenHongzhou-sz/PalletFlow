@@ -19,6 +19,7 @@ This repository currently contains the phase-one delivery requested in the PRD:
 - [Project Structure](./docs/phase-1/project-structure.md)
 - [Prototypes](./docs/phase-1/prototypes.md)
 - [Excel Import Spec](./docs/phase-1/excel-import.md)
+- [Supabase + GitHub Setup](./docs/supabase-github-setup.md)
 - [Initial Schema SQL](./supabase/migrations/0001_init_schema.sql)
 
 ## Current Source Tree
@@ -62,6 +63,18 @@ Recommended default:
 For GitHub Pages on `ChenHongzhou-sz/PalletFlow`, the deployment workflow already injects:
 
 - `VITE_APP_BASE_PATH=/PalletFlow/`
+
+For GitHub Actions deployment, add these repository secrets:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+And run the Supabase migrations through:
+
+- `0001_init_schema.sql`
+- `0002_inventory_transactions.sql`
+- `0003_master_data_import.sql`
+- `0004_api_access.sql`
 
 ## Product Direction
 
