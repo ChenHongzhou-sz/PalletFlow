@@ -24,6 +24,19 @@ body {
   margin: 0;
 }
 
+.pf-scanner-preview,
+.pf-scanner-preview > div,
+.pf-scanner-preview video,
+.pf-scanner-preview canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.pf-scanner-preview video,
+.pf-scanner-preview canvas {
+  object-fit: cover;
+}
+
 button,
 input,
 select,

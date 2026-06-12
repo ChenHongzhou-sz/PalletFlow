@@ -123,7 +123,21 @@ export function InboundPage() {
             allowCustom
           />
 
-          <SearchField label="2. 搜索物料" value={materialQuery} placeholder="支持料号、简称、描述、条码入口" onChange={setMaterialQuery} action={<ScanActionButton />} />
+          <SearchField
+            label="2. 搜索物料"
+            value={materialQuery}
+            placeholder="支持料号、简称、描述、条码入口"
+            onChange={setMaterialQuery}
+            action={
+              <ScanActionButton
+                onScan={(value) => {
+                  setError(null);
+                  setMessage(null);
+                  setMaterialQuery(value);
+                }}
+              />
+            }
+          />
 
           {materialOptions.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">

@@ -95,7 +95,20 @@ export function MaterialSearchPage() {
       <ConfigNotice />
 
       <section className="pf-panel space-y-4 p-5">
-        <SearchField label="输入料号 / 简称 / 描述" value={query} placeholder="例如 100UF、SZ121、SZ1005G121TF" onChange={setQuery} action={<ScanActionButton />} />
+        <SearchField
+          label="输入料号 / 简称 / 描述"
+          value={query}
+          placeholder="例如 100UF、SZ121、SZ1005G121TF"
+          onChange={setQuery}
+          action={
+            <ScanActionButton
+              onScan={(value) => {
+                setError(null);
+                setQuery(value);
+              }}
+            />
+          }
+        />
         <p className="text-xs leading-6 text-slate-500">搜索结果默认优先显示精确料号、简称和条码命中，再显示模糊搜索。</p>
       </section>
 
@@ -182,4 +195,3 @@ export function MaterialSearchPage() {
     </div>
   );
 }
-

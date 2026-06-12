@@ -125,7 +125,21 @@ export function OutboundPage() {
         <StepStrip current={currentStep} labels={["物料", "数量", "确认"]} />
 
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <SearchField label="1. 搜索物料" value={materialQuery} placeholder="例如 SZ121、100UF、完整料号" onChange={setMaterialQuery} action={<ScanActionButton />} />
+          <SearchField
+            label="1. 搜索物料"
+            value={materialQuery}
+            placeholder="例如 SZ121、100UF、完整料号"
+            onChange={setMaterialQuery}
+            action={
+              <ScanActionButton
+                onScan={(value) => {
+                  setError(null);
+                  setMessage(null);
+                  setMaterialQuery(value);
+                }}
+              />
+            }
+          />
 
           {materialOptions.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
