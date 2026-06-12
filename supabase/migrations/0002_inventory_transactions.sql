@@ -25,11 +25,11 @@ join public.warehouses w on w.id = so.warehouse_id
 join public.materials m on m.id = sol.material_id;
 
 create or replace function public.create_inbound_batch(
-  p_warehouse_code text default 'MAIN',
   p_pallet_code text,
   p_material_code text,
   p_quantity numeric,
   p_production_date date,
+  p_warehouse_code text default 'MAIN',
   p_lot_no text default null,
   p_box_barcode text default null,
   p_operator_name text default null,
@@ -336,8 +336,8 @@ end;
 $$;
 
 create or replace function public.clear_pallet_inventory(
-  p_warehouse_code text default 'MAIN',
   p_pallet_code text,
+  p_warehouse_code text default 'MAIN',
   p_operator_name text default null,
   p_note text default null
 )
@@ -457,9 +457,9 @@ end;
 $$;
 
 create or replace function public.complete_cycle_count(
-  p_warehouse_code text default 'MAIN',
   p_pallet_code text,
   p_items jsonb,
+  p_warehouse_code text default 'MAIN',
   p_operator_name text default null,
   p_note text default null
 )

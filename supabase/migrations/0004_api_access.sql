@@ -27,8 +27,8 @@ alter function public.search_materials(text, integer) set search_path = public, 
 alter function public.get_fifo_suggestions(uuid, numeric) security definer;
 alter function public.get_fifo_suggestions(uuid, numeric) set search_path = public, extensions;
 
-alter function public.create_inbound_batch(text, text, text, numeric, date, text, text, text, text, text) security definer;
-alter function public.create_inbound_batch(text, text, text, numeric, date, text, text, text, text, text) set search_path = public, extensions;
+alter function public.create_inbound_batch(text, text, numeric, date, text, text, text, text, text, text) security definer;
+alter function public.create_inbound_batch(text, text, numeric, date, text, text, text, text, text, text) set search_path = public, extensions;
 
 alter function public.confirm_outbound_pick(text, numeric, text, text, text) security definer;
 alter function public.confirm_outbound_pick(text, numeric, text, text, text) set search_path = public, extensions;
@@ -36,8 +36,8 @@ alter function public.confirm_outbound_pick(text, numeric, text, text, text) set
 alter function public.clear_pallet_inventory(text, text, text, text) security definer;
 alter function public.clear_pallet_inventory(text, text, text, text) set search_path = public, extensions;
 
-alter function public.complete_cycle_count(text, text, jsonb, text, text) security definer;
-alter function public.complete_cycle_count(text, text, jsonb, text, text) set search_path = public, extensions;
+alter function public.complete_cycle_count(text, jsonb, text, text, text) security definer;
+alter function public.complete_cycle_count(text, jsonb, text, text, text) set search_path = public, extensions;
 
 alter function public.bulk_upsert_materials(jsonb, text, text) security definer;
 alter function public.bulk_upsert_materials(jsonb, text, text) set search_path = public, extensions;
@@ -47,9 +47,9 @@ alter function public.bulk_upsert_barcode_aliases(jsonb, text, text) set search_
 
 grant execute on function public.search_materials(text, integer) to anon, authenticated;
 grant execute on function public.get_fifo_suggestions(uuid, numeric) to anon, authenticated;
-grant execute on function public.create_inbound_batch(text, text, text, numeric, date, text, text, text, text, text) to anon, authenticated;
+grant execute on function public.create_inbound_batch(text, text, numeric, date, text, text, text, text, text, text) to anon, authenticated;
 grant execute on function public.confirm_outbound_pick(text, numeric, text, text, text) to anon, authenticated;
 grant execute on function public.clear_pallet_inventory(text, text, text, text) to anon, authenticated;
-grant execute on function public.complete_cycle_count(text, text, jsonb, text, text) to anon, authenticated;
+grant execute on function public.complete_cycle_count(text, jsonb, text, text, text) to anon, authenticated;
 grant execute on function public.bulk_upsert_materials(jsonb, text, text) to anon, authenticated;
 grant execute on function public.bulk_upsert_barcode_aliases(jsonb, text, text) to anon, authenticated;

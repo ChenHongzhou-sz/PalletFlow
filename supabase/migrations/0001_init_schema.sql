@@ -11,6 +11,35 @@ begin
 end;
 $$;
 
+create or replace function public.set_material_search_text()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.search_text := lower(
+    trim(
+      coalesce(new.material_code, '') || ' ' ||
+      coalesce(new.short_code, '') || ' ' ||
+      coalesce(new.description, '') || ' ' ||
+      coalesce(new.category, '') || ' ' ||
+      coalesce(new.specification, '')
+    )
+  );
+
+  return new;
+end;
+$$;
+
+create or replace function public.set_inventory_count_variance()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.variance_quantity := new.counted_quantity - new.system_quantity;
+  return new;
+end;
+$$;
+
 create table if not exists public.warehouses (
   id uuid primary key default gen_random_uuid(),
   warehouse_code text not null unique,
@@ -52,18 +81,7 @@ create table if not exists public.materials (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
   deleted_at timestamptz,
-  search_text text generated always as (
-    lower(
-      concat_ws(
-        ' ',
-        material_code,
-        coalesce(short_code, ''),
-        coalesce(description, ''),
-        coalesce(category, ''),
-        coalesce(specification, '')
-      )
-    )
-  ) stored
+  search_text text not null default ''
 );
 
 create table if not exists public.barcode_aliases (
@@ -166,7 +184,7 @@ create table if not exists public.inventory_count_items (
   lot_no text,
   system_quantity numeric(18, 3) not null check (system_quantity >= 0),
   counted_quantity numeric(18, 3) not null check (counted_quantity >= 0),
-  variance_quantity numeric(18, 3) generated always as (counted_quantity - system_quantity) stored,
+  variance_quantity numeric(18, 3) not null default 0,
   note text,
   created_at timestamptz not null default timezone('utc', now()),
   constraint inventory_count_items_month_granularity_ck check (extract(day from production_date) = 1),
@@ -212,17 +230,30 @@ create index if not exists stock_operation_lines_pallet_idx
 create index if not exists inventory_counts_pallet_idx
   on public.inventory_counts (pallet_id, created_at desc);
 
+drop trigger if exists pallets_set_updated_at on public.pallets;
 create trigger pallets_set_updated_at
 before update on public.pallets
 for each row execute function public.set_updated_at();
 
+drop trigger if exists materials_set_updated_at on public.materials;
 create trigger materials_set_updated_at
 before update on public.materials
 for each row execute function public.set_updated_at();
 
+drop trigger if exists materials_set_search_text on public.materials;
+create trigger materials_set_search_text
+before insert or update on public.materials
+for each row execute function public.set_material_search_text();
+
+drop trigger if exists inventory_batches_set_updated_at on public.inventory_batches;
 create trigger inventory_batches_set_updated_at
 before update on public.inventory_batches
 for each row execute function public.set_updated_at();
+
+drop trigger if exists inventory_count_items_set_variance on public.inventory_count_items;
+create trigger inventory_count_items_set_variance
+before insert or update on public.inventory_count_items
+for each row execute function public.set_inventory_count_variance();
 
 create or replace view public.v_current_inventory_batches as
 select
