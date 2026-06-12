@@ -26,6 +26,13 @@ export function PalletCodeField({
 
   useEffect(() => {
     let cancelled = false;
+
+    if (!deferredValue) {
+      setOptions([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     listPalletLookupItems(deferredValue)
@@ -55,7 +62,7 @@ export function PalletCodeField({
     [deferredValue, options],
   );
 
-  const showDropdown = focused && (loading || options.length > 0 || Boolean(deferredValue));
+  const showDropdown = focused && Boolean(deferredValue) && (loading || options.length > 0);
 
   return (
     <label className="block">
