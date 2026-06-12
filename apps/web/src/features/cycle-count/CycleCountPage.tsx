@@ -12,6 +12,7 @@ import type { CycleCountInputRow, PalletInventoryRow } from "@/types/domain";
 
 export function CycleCountPage() {
   const [palletCode, setPalletCode] = useState("");
+  const [loadedPalletCode, setLoadedPalletCode] = useState<string | null>(null);
   const [rows, setRows] = useState<PalletInventoryRow[]>([]);
   const [countedMap, setCountedMap] = useState<Record<string, string>>({});
   const [operatorName, setOperatorName] = useState("");
@@ -20,8 +21,28 @@ export function CycleCountPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  function clearLoadedRows() {
+    setRows([]);
+    setCountedMap({});
+    setLoadedPalletCode(null);
+  }
+
+  function handlePalletCodeChange(value: string) {
+    const normalized = value.trim().toUpperCase();
+    setPalletCode(value);
+    setError(null);
+    setMessage(null);
+
+    if (loadedPalletCode && loadedPalletCode !== normalized) {
+      clearLoadedRows();
+    }
+  }
+
   async function handleLoadPallet() {
-    if (palletCode.trim().length < 2) {
+    const normalized = palletCode.trim().toUpperCase();
+
+    if (normalized.length < 2) {
+      clearLoadedRows();
       setError("请先输入卡板号。");
       return;
     }
@@ -29,17 +50,16 @@ export function CycleCountPage() {
     setLoading(true);
     setError(null);
     setMessage(null);
+    clearLoadedRows();
 
     try {
-      const inventoryRows = await getPalletInventory(palletCode.trim().toUpperCase());
+      const inventoryRows = await getPalletInventory(normalized);
       setRows(inventoryRows);
-      setCountedMap(
-        Object.fromEntries(inventoryRows.map((row) => [row.batchId, String(row.quantity)])),
-      );
+      setCountedMap(Object.fromEntries(inventoryRows.map((row) => [row.batchId, String(row.quantity)])));
+      setLoadedPalletCode(normalized);
     } catch (reason) {
+      clearLoadedRows();
       setError(resolveErrorMessage(reason));
-      setRows([]);
-      setCountedMap({});
     } finally {
       setLoading(false);
     }
@@ -50,6 +70,7 @@ export function CycleCountPage() {
       return;
     }
 
+    const normalized = palletCode.trim().toUpperCase();
     const items: CycleCountInputRow[] = rows.map((row) => ({
       batchId: row.batchId,
       countedQuantity: Number(countedMap[row.batchId] ?? row.quantity),
@@ -60,7 +81,7 @@ export function CycleCountPage() {
     setMessage(null);
 
     try {
-      const result = await completeCycleCount(palletCode.trim().toUpperCase(), items, operatorName);
+      const result = await completeCycleCount(normalized, items, operatorName);
       const changedLines = result.filter((row) => Number(row.variance_quantity ?? 0) !== 0).length;
       setMessage(`盘点已保存。共处理 ${rows.length} 个批次，产生 ${changedLines} 条差异调整。`);
     } catch (reason) {
@@ -72,7 +93,11 @@ export function CycleCountPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="Cycle Count" title="盘点" description="从卡板开始盘点，系统先拉出当前库存，再由你录入实际数量并生成差异。" />
+      <PageHeader
+        eyebrow="Cycle Count"
+        title="盘点"
+        description="从卡板开始盘点，系统先拉出当前库存，再由你录入实际数量并生成差异。"
+      />
       <ConfigNotice />
 
       <section className="pf-panel space-y-4 p-5">
@@ -80,12 +105,17 @@ export function CycleCountPage() {
           label="盘点卡板号"
           value={palletCode}
           placeholder="例如 A01"
-          onChange={setPalletCode}
+          onChange={handlePalletCodeChange}
           helperText="建议从已有卡板里直接选，减少手输错误。"
         />
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-slate-600">操作人</span>
-          <input className="pf-input" value={operatorName} onChange={(event) => setOperatorName(event.target.value)} placeholder="可选，例如 王五" />
+          <input
+            className="pf-input"
+            value={operatorName}
+            onChange={(event) => setOperatorName(event.target.value)}
+            placeholder="可选，例如 王五"
+          />
         </label>
         <button type="button" onClick={handleLoadPallet} disabled={loading} className="pf-button-secondary">
           {loading ? "正在加载..." : "开始盘点"}
