@@ -33,7 +33,10 @@ type Html5QrcodeCameraConfig = {
 
 type Html5QrcodeScanConfig = {
   fps?: number;
-  qrbox?: number | { width: number; height: number };
+  qrbox?:
+    | number
+    | { width: number; height: number }
+    | ((viewfinderWidth: number, viewfinderHeight: number) => { width: number; height: number });
   aspectRatio?: number;
   disableFlip?: boolean;
 };
@@ -79,6 +82,16 @@ interface StartBarcodeScannerOptions {
 }
 
 let html5QrcodeLoader: Promise<Html5QrcodeConstructor> | null = null;
+
+function getBarcodeScanBox(viewfinderWidth: number, viewfinderHeight: number) {
+  const width = Math.max(220, Math.min(Math.floor(viewfinderWidth * 0.88), 380));
+  const height = Math.max(90, Math.min(Math.floor(viewfinderHeight * 0.24), 140));
+
+  return {
+    width,
+    height,
+  };
+}
 
 export function canUseCameraScanner() {
   return typeof window !== "undefined" && typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
@@ -269,12 +282,9 @@ async function startHtml5QrcodeScanner(
         facingMode: "environment",
       },
       {
-        fps: 10,
-        qrbox: {
-          width: 280,
-          height: 160,
-        },
-        aspectRatio: 1.777778,
+        fps: 12,
+        qrbox: getBarcodeScanBox,
+        aspectRatio: 1.333334,
         disableFlip: false,
       },
       async (decodedText, decodedResult) => {

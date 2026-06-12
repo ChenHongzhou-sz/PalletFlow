@@ -160,11 +160,12 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
             <div ref={previewRef} className="pf-scanner-preview h-full w-full" />
             {!error ? (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="h-36 w-[78%] rounded-[1.75rem] border-2 border-dashed border-white/80 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.18)]" />
+                <div className="h-28 w-[86%] rounded-[1.75rem] border-2 border-dashed border-white/80 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.18)] sm:h-32" />
               </div>
             ) : null}
           </div>
         </div>
+        <p className="mt-3 text-xs leading-6 text-slate-500">像你刚发的这种横向长条码，请尽量横着放进取景框中央，条码两端都露出来，识别会更稳。</p>
 
         <div className="mt-4 rounded-[1.5rem] bg-slate-100 px-4 py-3 text-sm text-slate-600">
           <p>{statusText}</p>
