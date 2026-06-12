@@ -7,4 +7,5 @@ export const appRoutes = {
   cycleCount: "/counts",
   operationLogs: "/logs",
   masterDataImport: "/master-data-import",
+  inventoryExport: "/exports",
 } as const;

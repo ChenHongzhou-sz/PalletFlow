@@ -1,5 +1,5 @@
-import { ActionTile } from "@/components/mobile/ActionTile";
 import { ConfigNotice } from "@/components/feedback/ConfigNotice";
+import { ActionTile } from "@/components/mobile/ActionTile";
 import { appRoutes } from "@/lib/constants/routes";
 
 export function HomePage() {
@@ -34,6 +34,7 @@ export function HomePage() {
         <ActionTile to={appRoutes.outbound} title="出卡板" subtitle="按生产年月自动给出 FIFO 建议" tone="soft" />
         <ActionTile to={appRoutes.cycleCount} title="盘点" subtitle="从卡板开始核对系统数量与实际数量" tone="soft" />
         <ActionTile to={appRoutes.operationLogs} title="操作记录" subtitle="查进库、出库、盘点、清空历史" tone="soft" />
+        <ActionTile to={appRoutes.inventoryExport} title="数据导出" subtitle="一键导出当前所有卡板在库明细 Excel" tone="soft" />
       </section>
     </div>
   );

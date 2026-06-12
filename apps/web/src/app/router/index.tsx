@@ -3,6 +3,7 @@ import { AppShell } from "@/app/layouts/AppShell";
 import { CycleCountPage } from "@/features/cycle-count/CycleCountPage";
 import { HomePage } from "@/features/home/HomePage";
 import { InboundPage } from "@/features/inbound/InboundPage";
+import { InventoryExportPage } from "@/features/inventory-export/InventoryExportPage";
 import { MasterDataImportPage } from "@/features/master-data-import/MasterDataImportPage";
 import { MaterialSearchPage } from "@/features/material-search/MaterialSearchPage";
 import { OperationLogPage } from "@/features/operation-log/OperationLogPage";
@@ -42,6 +43,10 @@ export const router = createHashRouter([
       {
         path: "logs",
         element: <OperationLogPage />,
+      },
+      {
+        path: "exports",
+        element: <InventoryExportPage />,
       },
       {
         path: "master-data-import",

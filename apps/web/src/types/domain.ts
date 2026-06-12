@@ -34,6 +34,25 @@ export interface PalletInventoryRow {
   boxBarcode: string | null;
 }
 
+export interface CurrentInventoryExportRow {
+  batchId: string;
+  warehouseCode: string;
+  palletCode: string;
+  palletArea: string | null;
+  materialCode: string;
+  shortCode: string | null;
+  description: string | null;
+  category: string | null;
+  specification: string | null;
+  quantity: number;
+  initialQuantity: number;
+  productionDate: string;
+  lotNo: string | null;
+  boxBarcode: string | null;
+  inboundAt: string;
+  lastUpdatedAt: string;
+}
+
 export interface FifoSuggestionRow {
   batchId: string;
   palletId: string;
@@ -67,4 +86,3 @@ export interface CycleCountInputRow {
   countedQuantity: number;
   note?: string;
 }
-
