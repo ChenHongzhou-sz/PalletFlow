@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ConfigNotice } from "@/components/feedback/ConfigNotice";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { PalletCodeField } from "@/components/forms/PalletCodeField";
 import { SearchField } from "@/components/forms/SearchField";
 import { PageHeader } from "@/components/mobile/PageHeader";
 import { StepStrip } from "@/components/mobile/StepStrip";
@@ -114,7 +115,13 @@ export function InboundPage() {
         <StepStrip current={currentStep} labels={["卡板", "物料", "保存"]} />
 
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <SearchField label="1. 卡板号" value={palletCode} placeholder="例如 A01" onChange={(value) => setPalletCode(value.toUpperCase())} />
+          <PalletCodeField
+            label="1. 卡板号"
+            value={palletCode}
+            placeholder="例如 A01"
+            onChange={setPalletCode}
+            allowCustom
+          />
 
           <SearchField label="2. 搜索物料" value={materialQuery} placeholder="支持料号、简称、描述、条码入口" onChange={setMaterialQuery} action={<ScanActionButton />} />
 

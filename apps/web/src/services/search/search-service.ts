@@ -1,5 +1,5 @@
 import { requireSupabase } from "@/services/supabase/client";
-import type { MaterialDistributionRow, MaterialSearchItem, PalletInventoryRow } from "@/types/domain";
+import type { MaterialDistributionRow, MaterialSearchItem, PalletInventoryRow, PalletLookupItem } from "@/types/domain";
 
 type SearchMaterialsRpcRow = {
   material_id: string;
@@ -30,6 +30,16 @@ type CurrentInventoryBatchRow = {
   production_date: string;
   lot_no: string | null;
   box_barcode: string | null;
+};
+
+type PalletLookupViewRow = {
+  pallet_id: string;
+  warehouse_code: string;
+  pallet_code: string;
+  pallet_area: string | null;
+  status: string;
+  created_at: string;
+  active_batch_count: number;
 };
 
 type MaterialDistributionViewRow = {
@@ -151,4 +161,58 @@ export async function getPalletInventory(palletCode: string) {
     lotNo: row.lot_no,
     boxBarcode: row.box_barcode,
   }));
+}
+
+export async function listPalletLookupItems(query: string, limit = 8) {
+  const db = requireSupabase();
+  const normalized = query.trim().toUpperCase();
+
+  let request = db
+    .from("v_pallet_lookup")
+    .select("pallet_id, warehouse_code, pallet_code, pallet_area, status, created_at, active_batch_count")
+    .order("pallet_code", { ascending: true })
+    .limit(limit * 3);
+
+  if (normalized) {
+    request = request.ilike("pallet_code", `%${normalized}%`);
+  }
+
+  const { data, error } = await request;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rows = ((data ?? []) as PalletLookupViewRow[])
+    .map(
+      (row): PalletLookupItem => ({
+        palletId: row.pallet_id,
+        warehouseCode: row.warehouse_code,
+        palletCode: row.pallet_code,
+        palletArea: row.pallet_area ?? null,
+        status: row.status,
+        createdAt: row.created_at,
+        activeBatchCount: Number(row.active_batch_count ?? 0),
+      }),
+    )
+    .sort((a, b) => {
+      const aCode = a.palletCode.toUpperCase();
+      const bCode = b.palletCode.toUpperCase();
+      const aExact = normalized && aCode === normalized ? 1 : 0;
+      const bExact = normalized && bCode === normalized ? 1 : 0;
+      if (aExact !== bExact) {
+        return bExact - aExact;
+      }
+
+      const aPrefix = normalized && aCode.startsWith(normalized) ? 1 : 0;
+      const bPrefix = normalized && bCode.startsWith(normalized) ? 1 : 0;
+      if (aPrefix !== bPrefix) {
+        return bPrefix - aPrefix;
+      }
+
+      return aCode.localeCompare(bCode);
+    })
+    .slice(0, limit);
+
+  return rows;
 }

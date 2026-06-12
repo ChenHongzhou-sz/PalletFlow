@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ConfigNotice } from "@/components/feedback/ConfigNotice";
 import { EmptyState } from "@/components/feedback/EmptyState";
-import { SearchField } from "@/components/forms/SearchField";
+import { PalletCodeField } from "@/components/forms/PalletCodeField";
 import { PageHeader } from "@/components/mobile/PageHeader";
 import { resolveErrorMessage } from "@/lib/api/errors";
 import { formatProductionMonth } from "@/lib/formatters/date";
@@ -76,7 +76,13 @@ export function CycleCountPage() {
       <ConfigNotice />
 
       <section className="pf-panel space-y-4 p-5">
-        <SearchField label="盘点卡板号" value={palletCode} placeholder="例如 A01" onChange={(value) => setPalletCode(value.toUpperCase())} />
+        <PalletCodeField
+          label="盘点卡板号"
+          value={palletCode}
+          placeholder="例如 A01"
+          onChange={setPalletCode}
+          helperText="建议从已有卡板里直接选，减少手输错误。"
+        />
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-slate-600">操作人</span>
           <input className="pf-input" value={operatorName} onChange={(event) => setOperatorName(event.target.value)} placeholder="可选，例如 王五" />
@@ -147,4 +153,3 @@ export function CycleCountPage() {
     </div>
   );
 }
-

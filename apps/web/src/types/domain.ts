@@ -53,6 +53,16 @@ export interface CurrentInventoryExportRow {
   lastUpdatedAt: string;
 }
 
+export interface PalletLookupItem {
+  palletId: string;
+  warehouseCode: string;
+  palletCode: string;
+  palletArea: string | null;
+  status: string;
+  createdAt: string;
+  activeBatchCount: number;
+}
+
 export interface FifoSuggestionRow {
   batchId: string;
   palletId: string;

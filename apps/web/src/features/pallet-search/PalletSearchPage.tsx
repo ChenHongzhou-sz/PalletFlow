@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useState } from "react";
 import { ConfigNotice } from "@/components/feedback/ConfigNotice";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { PalletCodeField } from "@/components/forms/PalletCodeField";
 import { StatCard } from "@/components/feedback/StatCard";
 import { SearchField } from "@/components/forms/SearchField";
 import { PageHeader } from "@/components/mobile/PageHeader";
@@ -107,7 +108,13 @@ export function PalletSearchPage() {
       <ConfigNotice />
 
       <section className="pf-panel space-y-4 p-5">
-        <SearchField label="卡板号" value={palletCode} placeholder="例如 A01、B15、C08" onChange={(value) => setPalletCode(value.toUpperCase())} />
+        <PalletCodeField
+          label="卡板号"
+          value={palletCode}
+          placeholder="例如 A01、B15、C08"
+          onChange={setPalletCode}
+          helperText="下拉建议来自系统里已存在的卡板号，输入越接近，候选会越少。"
+        />
         <SearchField label="卡板内筛选物料" value={materialFilter} placeholder="可输入简称、料号或描述再筛一次" onChange={setMaterialFilter} />
       </section>
 
@@ -163,4 +170,3 @@ export function PalletSearchPage() {
     </div>
   );
 }
-

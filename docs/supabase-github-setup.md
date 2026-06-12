@@ -39,6 +39,7 @@ Run these SQL files in order:
 3. `supabase/migrations/0003_master_data_import.sql`
 4. `supabase/migrations/0004_api_access.sql`
 5. `supabase/migrations/0005_inventory_exports.sql`
+6. `supabase/migrations/0006_pallet_lookup.sql`
 
 Then optionally run:
 
