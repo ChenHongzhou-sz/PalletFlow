@@ -1,0 +1,5 @@
+apps/web/node_modules
+apps/web/dist
+apps/web/.env
+apps/web/.env.*
+.DS_Store

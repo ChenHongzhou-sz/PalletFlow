@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #18212b;
+  background:
+    radial-gradient(circle at top left, rgba(242, 163, 59, 0.28), transparent 28rem),
+    linear-gradient(180deg, #f8f2e8 0%, #eef2f5 72%, #e8edf0 100%);
+  font-family: "Segoe UI Variable", "Noto Sans SC", "PingFang SC", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+@layer components {
+  .pf-shell {
+    @apply min-h-screen bg-warehouse-grid bg-[length:22px_22px];
+  }
+
+  .pf-panel {
+    @apply rounded-4xl border border-white/60 bg-white/[0.82] shadow-card backdrop-blur;
+  }
+
+  .pf-pill {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide;
+  }
+
+  .pf-input {
+    @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-ink outline-none transition placeholder:text-slate-400 focus:border-ember focus:ring-4 focus:ring-ember/[0.15];
+  }
+
+  .pf-button-primary {
+    @apply inline-flex items-center justify-center rounded-3xl bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-black focus:outline-none focus:ring-4 focus:ring-ink/15 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .pf-button-secondary {
+    @apply inline-flex items-center justify-center rounded-3xl bg-ember px-5 py-3 text-sm font-semibold text-ink transition hover:-translate-y-0.5 hover:brightness-95 focus:outline-none focus:ring-4 focus:ring-ember/20 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .pf-button-danger {
+    @apply inline-flex items-center justify-center rounded-3xl bg-danger px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-danger/20 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+}

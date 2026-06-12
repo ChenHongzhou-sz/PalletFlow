@@ -1,0 +1,130 @@
+<svg width="1680" height="1320" viewBox="0 0 1680 1320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1680" height="1320" fill="#F3F0E8"/>
+  <text x="80" y="90" fill="#18212B" font-family="Arial, sans-serif" font-size="40" font-weight="700">PalletFlow V1 Mobile Wireframes</text>
+  <text x="80" y="126" fill="#50606F" font-family="Arial, sans-serif" font-size="20">Production warehouse tool. Search first. Big targets. Three-step flows.</text>
+
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#1A1A1A" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <g transform="translate(80 180)" filter="url(#shadow)">
+    <rect width="450" height="500" rx="36" fill="#18212B"/>
+    <rect x="20" y="20" width="410" height="460" rx="28" fill="#FFF9F1"/>
+    <text x="48" y="72" fill="#18212B" font-family="Arial, sans-serif" font-size="28" font-weight="700">01 Home</text>
+    <rect x="48" y="96" width="334" height="18" rx="9" fill="#C8D0D8"/>
+    <rect x="48" y="134" width="334" height="92" rx="22" fill="#F2A33B"/>
+    <text x="76" y="188" fill="#18212B" font-family="Arial, sans-serif" font-size="28" font-weight="700">查物料</text>
+    <rect x="48" y="242" width="334" height="92" rx="22" fill="#18212B"/>
+    <text x="76" y="296" fill="#FFF9F1" font-family="Arial, sans-serif" font-size="28" font-weight="700">查卡板</text>
+    <rect x="48" y="350" width="160" height="70" rx="20" fill="#DDE5EC"/>
+    <rect x="222" y="350" width="160" height="70" rx="20" fill="#DDE5EC"/>
+    <rect x="48" y="432" width="160" height="24" rx="12" fill="#A6B3BE"/>
+    <rect x="222" y="432" width="160" height="24" rx="12" fill="#A6B3BE"/>
+    <text x="88" y="392" fill="#18212B" font-family="Arial, sans-serif" font-size="24" font-weight="700">进卡板</text>
+    <text x="262" y="392" fill="#18212B" font-family="Arial, sans-serif" font-size="24" font-weight="700">出卡板</text>
+  </g>
+
+  <g transform="translate(615 180)" filter="url(#shadow)">
+    <rect width="450" height="500" rx="36" fill="#18212B"/>
+    <rect x="20" y="20" width="410" height="460" rx="28" fill="#FFF9F1"/>
+    <text x="48" y="72" fill="#18212B" font-family="Arial, sans-serif" font-size="28" font-weight="700">02 Search Material</text>
+    <rect x="48" y="100" width="258" height="52" rx="18" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <rect x="320" y="100" width="62" height="52" rx="18" fill="#F2A33B"/>
+    <text x="70" y="133" fill="#6B7885" font-family="Arial, sans-serif" font-size="18">100UF / SZ121 / 条码</text>
+    <text x="336" y="133" fill="#18212B" font-family="Arial, sans-serif" font-size="18" font-weight="700">扫码</text>
+    <rect x="48" y="172" width="334" height="96" rx="22" fill="#18212B"/>
+    <text x="74" y="208" fill="#FFF9F1" font-family="Arial, sans-serif" font-size="24" font-weight="700">35V100UF / SZ121</text>
+    <text x="74" y="240" fill="#D8E2EB" font-family="Arial, sans-serif" font-size="18">总库存 1000 PCS   卡板 3</text>
+    <rect x="48" y="290" width="334" height="44" rx="16" fill="#DDE5EC"/>
+    <rect x="48" y="346" width="334" height="44" rx="16" fill="#DDE5EC"/>
+    <rect x="48" y="402" width="334" height="44" rx="16" fill="#DDE5EC"/>
+    <text x="68" y="319" fill="#18212B" font-family="Arial, sans-serif" font-size="20" font-weight="700">A01   300 PCS   2024-12</text>
+    <text x="68" y="375" fill="#18212B" font-family="Arial, sans-serif" font-size="20" font-weight="700">A03   500 PCS   2025-03</text>
+    <text x="68" y="431" fill="#18212B" font-family="Arial, sans-serif" font-size="20" font-weight="700">A07   200 PCS   2025-06</text>
+  </g>
+
+  <g transform="translate(1150 180)" filter="url(#shadow)">
+    <rect width="450" height="500" rx="36" fill="#18212B"/>
+    <rect x="20" y="20" width="410" height="460" rx="28" fill="#FFF9F1"/>
+    <text x="48" y="72" fill="#18212B" font-family="Arial, sans-serif" font-size="28" font-weight="700">03 Search Pallet</text>
+    <rect x="48" y="100" width="334" height="52" rx="18" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <text x="70" y="133" fill="#6B7885" font-family="Arial, sans-serif" font-size="18">输入卡板号 A01</text>
+    <rect x="48" y="174" width="334" height="44" rx="16" fill="#F2A33B"/>
+    <text x="68" y="203" fill="#18212B" font-family="Arial, sans-serif" font-size="22" font-weight="700">A01  当前 3 个批次</text>
+    <rect x="48" y="236" width="334" height="54" rx="18" fill="#DDE5EC"/>
+    <rect x="48" y="300" width="334" height="54" rx="18" fill="#DDE5EC"/>
+    <rect x="48" y="364" width="334" height="54" rx="18" fill="#DDE5EC"/>
+    <text x="68" y="270" fill="#18212B" font-family="Arial, sans-serif" font-size="19" font-weight="700">35V100UF   300   2024-12</text>
+    <text x="68" y="334" fill="#18212B" font-family="Arial, sans-serif" font-size="19" font-weight="700">47UF35V    200   2025-03</text>
+    <text x="68" y="398" fill="#18212B" font-family="Arial, sans-serif" font-size="19" font-weight="700">SZ121      500   2025-06</text>
+    <rect x="48" y="434" width="334" height="24" rx="12" fill="#B94A48"/>
+    <text x="162" y="452" fill="#FFF9F1" font-family="Arial, sans-serif" font-size="15" font-weight="700">清空卡板（二次确认）</text>
+  </g>
+
+  <g transform="translate(80 740)" filter="url(#shadow)">
+    <rect width="450" height="500" rx="36" fill="#18212B"/>
+    <rect x="20" y="20" width="410" height="460" rx="28" fill="#FFF9F1"/>
+    <text x="48" y="72" fill="#18212B" font-family="Arial, sans-serif" font-size="28" font-weight="700">04 Inbound</text>
+    <rect x="48" y="100" width="92" height="34" rx="17" fill="#F2A33B"/>
+    <rect x="150" y="100" width="92" height="34" rx="17" fill="#DDE5EC"/>
+    <rect x="252" y="100" width="92" height="34" rx="17" fill="#DDE5EC"/>
+    <text x="78" y="122" fill="#18212B" font-family="Arial, sans-serif" font-size="16" font-weight="700">1 卡板</text>
+    <text x="180" y="122" fill="#18212B" font-family="Arial, sans-serif" font-size="16" font-weight="700">2 物料</text>
+    <text x="282" y="122" fill="#18212B" font-family="Arial, sans-serif" font-size="16" font-weight="700">3 保存</text>
+    <rect x="48" y="156" width="334" height="48" rx="16" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <rect x="48" y="218" width="334" height="48" rx="16" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <rect x="48" y="280" width="160" height="48" rx="16" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <rect x="222" y="280" width="160" height="48" rx="16" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <rect x="48" y="342" width="160" height="48" rx="16" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <rect x="222" y="342" width="160" height="48" rx="16" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <rect x="48" y="414" width="334" height="52" rx="18" fill="#18212B"/>
+    <text x="70" y="186" fill="#6B7885" font-family="Arial, sans-serif" font-size="18">A01</text>
+    <text x="70" y="248" fill="#6B7885" font-family="Arial, sans-serif" font-size="18">扫码或搜索物料</text>
+    <text x="70" y="310" fill="#6B7885" font-family="Arial, sans-serif" font-size="18">数量</text>
+    <text x="244" y="310" fill="#6B7885" font-family="Arial, sans-serif" font-size="18">生产年月</text>
+    <text x="70" y="372" fill="#6B7885" font-family="Arial, sans-serif" font-size="18">批次号</text>
+    <text x="244" y="372" fill="#6B7885" font-family="Arial, sans-serif" font-size="18">外箱条码</text>
+    <text x="176" y="447" fill="#FFF9F1" font-family="Arial, sans-serif" font-size="24" font-weight="700">保存入库</text>
+  </g>
+
+  <g transform="translate(615 740)" filter="url(#shadow)">
+    <rect width="450" height="500" rx="36" fill="#18212B"/>
+    <rect x="20" y="20" width="410" height="460" rx="28" fill="#FFF9F1"/>
+    <text x="48" y="72" fill="#18212B" font-family="Arial, sans-serif" font-size="28" font-weight="700">05 Outbound FIFO</text>
+    <rect x="48" y="100" width="240" height="48" rx="16" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <rect x="300" y="100" width="82" height="48" rx="16" fill="#F2A33B"/>
+    <text x="68" y="130" fill="#6B7885" font-family="Arial, sans-serif" font-size="18">搜索物料</text>
+    <text x="322" y="130" fill="#18212B" font-family="Arial, sans-serif" font-size="18" font-weight="700">扫码</text>
+    <rect x="48" y="164" width="334" height="48" rx="16" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <text x="68" y="194" fill="#6B7885" font-family="Arial, sans-serif" font-size="18">需求数量 400</text>
+    <rect x="48" y="230" width="334" height="68" rx="20" fill="#DDE5EC"/>
+    <rect x="48" y="310" width="334" height="68" rx="20" fill="#DDE5EC"/>
+    <text x="68" y="258" fill="#18212B" font-family="Arial, sans-serif" font-size="20" font-weight="700">A01   2024-12   可用300</text>
+    <text x="68" y="284" fill="#50606F" font-family="Arial, sans-serif" font-size="18">建议扣减 300</text>
+    <text x="68" y="338" fill="#18212B" font-family="Arial, sans-serif" font-size="20" font-weight="700">A03   2025-03   可用500</text>
+    <text x="68" y="364" fill="#50606F" font-family="Arial, sans-serif" font-size="18">建议扣减 100</text>
+    <rect x="48" y="414" width="334" height="52" rx="18" fill="#18212B"/>
+    <text x="134" y="447" fill="#FFF9F1" font-family="Arial, sans-serif" font-size="24" font-weight="700">确认按 FIFO 出库</text>
+  </g>
+
+  <g transform="translate(1150 740)" filter="url(#shadow)">
+    <rect width="450" height="500" rx="36" fill="#18212B"/>
+    <rect x="20" y="20" width="410" height="460" rx="28" fill="#FFF9F1"/>
+    <text x="48" y="72" fill="#18212B" font-family="Arial, sans-serif" font-size="28" font-weight="700">06 Count + Logs</text>
+    <rect x="48" y="100" width="334" height="48" rx="16" fill="#F2A33B"/>
+    <text x="144" y="130" fill="#18212B" font-family="Arial, sans-serif" font-size="20" font-weight="700">开始盘点 A01</text>
+    <rect x="48" y="166" width="334" height="50" rx="16" fill="#DDE5EC"/>
+    <text x="68" y="197" fill="#18212B" font-family="Arial, sans-serif" font-size="18" font-weight="700">系统 300 / 实际 280 / 差异 -20</text>
+    <rect x="48" y="232" width="334" height="42" rx="14" fill="#18212B"/>
+    <text x="120" y="259" fill="#FFF9F1" font-family="Arial, sans-serif" font-size="18" font-weight="700">保存盘点差异</text>
+    <rect x="48" y="300" width="100" height="28" rx="14" fill="#DDE5EC"/>
+    <rect x="160" y="300" width="100" height="28" rx="14" fill="#DDE5EC"/>
+    <rect x="272" y="300" width="110" height="28" rx="14" fill="#DDE5EC"/>
+    <rect x="48" y="346" width="334" height="44" rx="16" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <rect x="48" y="402" width="334" height="44" rx="16" fill="#FFFFFF" stroke="#CCD5DD"/>
+    <text x="68" y="375" fill="#18212B" font-family="Arial, sans-serif" font-size="18" font-weight="700">06-12  出库  A01  SZ121  -300</text>
+    <text x="68" y="431" fill="#18212B" font-family="Arial, sans-serif" font-size="18" font-weight="700">06-12  进库  A03  35V100UF +500</text>
+  </g>
+</svg>

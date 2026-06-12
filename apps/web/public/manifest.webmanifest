@@ -1,0 +1,23 @@
+{
+  "name": "PalletFlow",
+  "short_name": "PalletFlow",
+  "description": "电子元器件仓库卡板管理系统",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4ede1",
+  "theme_color": "#18212b",
+  "icons": [
+    {
+      "src": "./icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/maskable-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
