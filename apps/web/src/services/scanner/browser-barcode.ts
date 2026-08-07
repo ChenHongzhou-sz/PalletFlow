@@ -1,5 +1,3 @@
-const HTML5_QRCODE_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js";
-
 const NATIVE_BARCODE_FORMATS = [
   "code_128",
   "code_39",
@@ -41,28 +39,35 @@ type Html5QrcodeScanConfig = {
   disableFlip?: boolean;
 };
 
+type Html5QrcodeDecodedResult = {
+  result?: {
+    format?: {
+      formatName?: string;
+    };
+  };
+};
+
 type Html5QrcodeInstance = {
   start: (
     cameraConfig: Html5QrcodeCameraConfig,
     config: Html5QrcodeScanConfig,
-    onSuccess: (decodedText: string, decodedResult: { result?: { format?: { formatName?: string } } }) => void,
+    onSuccess: (decodedText: string, decodedResult: Html5QrcodeDecodedResult) => void,
     onError?: (errorMessage: string) => void,
-  ) => Promise<void>;
+  ) => Promise<unknown>;
   stop: () => Promise<void>;
-  clear: () => Promise<void> | void;
+  clear: () => void;
 };
 
 type Html5QrcodeConstructor = new (
   elementId: string,
-  config?: {
-    verbose?: boolean;
-  },
+  config?: boolean | { verbose?: boolean },
 ) => Html5QrcodeInstance;
+
+type Html5QrcodeModule = typeof import("html5-qrcode");
 
 declare global {
   interface Window {
     BarcodeDetector?: NativeBarcodeDetectorConstructor;
-    Html5Qrcode?: Html5QrcodeConstructor;
   }
 }
 
@@ -216,7 +221,7 @@ async function startNativeBarcodeScanner(
           return;
         }
       } catch {
-        // Ignore intermittent detector errors while the camera is still warming up.
+        // Ignore intermittent detector errors while the camera is warming up.
       } finally {
         detecting = false;
       }
@@ -301,7 +306,7 @@ async function startHtml5QrcodeScanner(
         });
       },
       () => {
-        // html5-qrcode reports every non-match here; we intentionally keep the UI quiet.
+        // html5-qrcode reports every non-match here; keep the UI quiet.
       },
     );
   } catch (error) {
@@ -316,52 +321,26 @@ async function startHtml5QrcodeScanner(
 }
 
 async function loadHtml5Qrcode() {
-  if (window.Html5Qrcode) {
-    return window.Html5Qrcode;
-  }
-
   if (!html5QrcodeLoader) {
-    html5QrcodeLoader = new Promise<Html5QrcodeConstructor>((resolve, reject) => {
-      const existingScript = document.querySelector<HTMLScriptElement>('script[data-palletflow-html5-qrcode="true"]');
-
-      const handleLoad = () => {
-        if (window.Html5Qrcode) {
-          resolve(window.Html5Qrcode);
-          return;
+    // Bundle the fallback scanner with the app so scan still works even
+    // when the device cannot reach a third-party CDN.
+    html5QrcodeLoader = import("html5-qrcode")
+      .then((module: Html5QrcodeModule) => {
+        if (typeof module.Html5Qrcode === "function") {
+          return module.Html5Qrcode as Html5QrcodeConstructor;
         }
 
         html5QrcodeLoader = null;
-        reject(new Error("扫码组件已加载，但浏览器没有暴露 Html5Qrcode 对象。"));
-      };
-
-      const handleError = () => {
+        throw new Error("Scanner module loaded without Html5Qrcode.");
+      })
+      .catch((error) => {
         html5QrcodeLoader = null;
-        reject(new Error("无法加载扫码组件。请检查网络后重试。"));
-      };
+        if (error instanceof Error) {
+          throw error;
+        }
 
-      if (existingScript) {
-        existingScript.addEventListener("load", handleLoad, {
-          once: true,
-        });
-        existingScript.addEventListener("error", handleError, {
-          once: true,
-        });
-        return;
-      }
-
-      const script = document.createElement("script");
-      script.async = true;
-      script.src = HTML5_QRCODE_SCRIPT_URL;
-      script.crossOrigin = "anonymous";
-      script.dataset.palletflowHtml5Qrcode = "true";
-      script.addEventListener("load", handleLoad, {
-        once: true,
+        throw new Error("Unable to load the barcode scanner module.");
       });
-      script.addEventListener("error", handleError, {
-        once: true,
-      });
-      document.head.appendChild(script);
-    });
   }
 
   return html5QrcodeLoader;
@@ -375,6 +354,10 @@ function normalizeScannerStartError(error: unknown) {
 
     if (/notfound|devicesnotfound|overconstrained/i.test(error.message)) {
       return new Error("没有找到可用的后置摄像头。请检查手机相机权限或换一台设备。");
+    }
+
+    if (/load|import|chunk/i.test(error.message)) {
+      return new Error("扫码组件加载失败，请刷新页面后重试。");
     }
 
     return error;
