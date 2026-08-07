@@ -12,6 +12,18 @@ const NATIVE_BARCODE_FORMATS = [
   "data_matrix",
 ] as const;
 
+const COMMON_LINEAR_BARCODE_FORMATS = [
+  "code_128",
+  "code_39",
+  "code_93",
+  "codabar",
+  "ean_13",
+  "ean_8",
+  "itf",
+  "upc_a",
+  "upc_e",
+] as const;
+
 type NativeBarcode = {
   rawValue?: string;
   format?: string;
@@ -21,9 +33,12 @@ type NativeBarcodeDetector = {
   detect: (source: ImageBitmapSource) => Promise<NativeBarcode[]>;
 };
 
-type NativeBarcodeDetectorConstructor = new (options?: {
-  formats?: readonly string[];
-}) => NativeBarcodeDetector;
+type NativeBarcodeDetectorConstructor = {
+  new (options?: {
+    formats?: readonly string[];
+  }): NativeBarcodeDetector;
+  getSupportedFormats?: () => Promise<string[]>;
+};
 
 type Html5QrcodeCameraConfig = {
   facingMode?: "user" | "environment" | { exact: string } | { ideal: string };
@@ -66,24 +81,10 @@ type Html5QrcodeConstructor = new (
     | {
         verbose?: boolean;
         useBarCodeDetectorIfSupported?: boolean;
-        formatsToSupport?: number[];
       },
 ) => Html5QrcodeInstance;
 
 type Html5QrcodeModule = typeof import("html5-qrcode");
-type Html5QrcodeSupportedFormatsEnum = {
-  QR_CODE: number;
-  CODABAR: number;
-  CODE_39: number;
-  CODE_93: number;
-  CODE_128: number;
-  DATA_MATRIX: number;
-  ITF: number;
-  EAN_13: number;
-  EAN_8: number;
-  UPC_A: number;
-  UPC_E: number;
-};
 
 declare global {
   interface Window {
@@ -109,8 +110,8 @@ interface StartBarcodeScannerOptions {
 let html5QrcodeLoader: Promise<Html5QrcodeConstructor> | null = null;
 
 function getBarcodeScanBox(viewfinderWidth: number, viewfinderHeight: number) {
-  const width = Math.max(240, Math.min(Math.floor(viewfinderWidth * 0.88), 420));
-  const height = Math.max(96, Math.min(Math.floor(viewfinderHeight * 0.22), 136));
+  const width = Math.max(260, Math.min(Math.floor(viewfinderWidth * 0.9), 440));
+  const height = Math.max(132, Math.min(Math.floor(viewfinderHeight * 0.28), 176));
 
   return {
     width,
@@ -138,15 +139,19 @@ export async function startCameraBarcodeScanner({
     throw new Error(getCameraScannerUnsupportedMessage());
   }
 
+  const nativeCapabilities = await resolveNativeBarcodeCapabilities();
+
   try {
-    return await startHtml5QrcodeScanner(container, onDetected);
+    return await startHtml5QrcodeScanner(container, onDetected, {
+      useNativeBarcodeDetector: nativeCapabilities.preferNativeAssist,
+    });
   } catch (error) {
-    if (!canUseNativeBarcodeDetector() || !shouldFallbackToNativeScanner(error)) {
+    if (!nativeCapabilities.fallbackFormats.length || !shouldFallbackToNativeScanner(error)) {
       throw error;
     }
   }
 
-  return startNativeBarcodeScanner(container, onDetected);
+  return startNativeBarcodeScanner(container, onDetected, nativeCapabilities.fallbackFormats);
 }
 
 function shouldFallbackToNativeScanner(error: unknown) {
@@ -160,6 +165,7 @@ function shouldFallbackToNativeScanner(error: unknown) {
 async function startNativeBarcodeScanner(
   container: HTMLElement,
   onDetected: (result: BarcodeScanResult) => void,
+  formats: readonly string[],
 ): Promise<BarcodeScannerSession> {
   const BarcodeDetector = window.BarcodeDetector;
 
@@ -205,7 +211,7 @@ async function startNativeBarcodeScanner(
   }
 
   const detector = new BarcodeDetector({
-    formats: NATIVE_BARCODE_FORMATS,
+    formats,
   });
 
   let stopped = false;
@@ -275,24 +281,11 @@ async function startNativeBarcodeScanner(
 async function startHtml5QrcodeScanner(
   container: HTMLElement,
   onDetected: (result: BarcodeScanResult) => void,
+  options: {
+    useNativeBarcodeDetector: boolean;
+  },
 ): Promise<BarcodeScannerSession> {
   const Html5Qrcode = await loadHtml5Qrcode();
-  const { Html5QrcodeSupportedFormats } = (await import("html5-qrcode")) as Html5QrcodeModule & {
-    Html5QrcodeSupportedFormats: Html5QrcodeSupportedFormatsEnum;
-  };
-  const supportedFormats = [
-    Html5QrcodeSupportedFormats.CODE_128,
-    Html5QrcodeSupportedFormats.CODE_39,
-    Html5QrcodeSupportedFormats.CODE_93,
-    Html5QrcodeSupportedFormats.CODABAR,
-    Html5QrcodeSupportedFormats.EAN_13,
-    Html5QrcodeSupportedFormats.EAN_8,
-    Html5QrcodeSupportedFormats.ITF,
-    Html5QrcodeSupportedFormats.UPC_A,
-    Html5QrcodeSupportedFormats.UPC_E,
-    Html5QrcodeSupportedFormats.QR_CODE,
-    Html5QrcodeSupportedFormats.DATA_MATRIX,
-  ];
   const mountNode = document.createElement("div");
   const elementId = `pf-scanner-${Math.random().toString(36).slice(2, 10)}`;
   mountNode.id = elementId;
@@ -301,8 +294,7 @@ async function startHtml5QrcodeScanner(
 
   const scanner = new Html5Qrcode(elementId, {
     verbose: false,
-    useBarCodeDetectorIfSupported: true,
-    formatsToSupport: supportedFormats,
+    useBarCodeDetectorIfSupported: options.useNativeBarcodeDetector,
   });
 
   let stopped = false;
@@ -381,6 +373,53 @@ async function startHtml5QrcodeScanner(
     engine: "html5-qrcode",
     stop,
   };
+}
+
+async function resolveNativeBarcodeCapabilities() {
+  const supportedFormats = await getSupportedNativeBarcodeFormats();
+
+  if (!supportedFormats.length) {
+    return {
+      preferNativeAssist: false,
+      fallbackFormats: [] as string[],
+    };
+  }
+
+  const supportsCommonLinearCodes = supportedFormats.some((format) =>
+    COMMON_LINEAR_BARCODE_FORMATS.includes(format as (typeof COMMON_LINEAR_BARCODE_FORMATS)[number]),
+  );
+
+  if (!supportsCommonLinearCodes) {
+    return {
+      preferNativeAssist: false,
+      fallbackFormats: [] as string[],
+    };
+  }
+
+  return {
+    preferNativeAssist: true,
+    fallbackFormats: supportedFormats,
+  };
+}
+
+async function getSupportedNativeBarcodeFormats() {
+  const BarcodeDetector = window.BarcodeDetector;
+
+  if (!BarcodeDetector || typeof BarcodeDetector.getSupportedFormats !== "function") {
+    return [];
+  }
+
+  try {
+    const supportedFormats = await BarcodeDetector.getSupportedFormats();
+
+    if (!Array.isArray(supportedFormats) || !supportedFormats.length) {
+      return [];
+    }
+
+    return NATIVE_BARCODE_FORMATS.filter((format) => supportedFormats.includes(format));
+  } catch {
+    return [];
+  }
 }
 
 async function loadHtml5Qrcode() {
