@@ -37,6 +37,7 @@ type Html5QrcodeScanConfig = {
     | ((viewfinderWidth: number, viewfinderHeight: number) => { width: number; height: number });
   aspectRatio?: number;
   disableFlip?: boolean;
+  videoConstraints?: MediaTrackConstraints;
 };
 
 type Html5QrcodeDecodedResult = {
@@ -65,10 +66,24 @@ type Html5QrcodeConstructor = new (
     | {
         verbose?: boolean;
         useBarCodeDetectorIfSupported?: boolean;
+        formatsToSupport?: number[];
       },
 ) => Html5QrcodeInstance;
 
 type Html5QrcodeModule = typeof import("html5-qrcode");
+type Html5QrcodeSupportedFormatsEnum = {
+  QR_CODE: number;
+  CODABAR: number;
+  CODE_39: number;
+  CODE_93: number;
+  CODE_128: number;
+  DATA_MATRIX: number;
+  ITF: number;
+  EAN_13: number;
+  EAN_8: number;
+  UPC_A: number;
+  UPC_E: number;
+};
 
 declare global {
   interface Window {
@@ -94,11 +109,12 @@ interface StartBarcodeScannerOptions {
 let html5QrcodeLoader: Promise<Html5QrcodeConstructor> | null = null;
 
 function getBarcodeScanBox(viewfinderWidth: number, viewfinderHeight: number) {
-  const edge = Math.max(220, Math.min(Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.74), 320));
+  const width = Math.max(240, Math.min(Math.floor(viewfinderWidth * 0.88), 420));
+  const height = Math.max(96, Math.min(Math.floor(viewfinderHeight * 0.22), 136));
 
   return {
-    width: edge,
-    height: edge,
+    width,
+    height,
   };
 }
 
@@ -122,17 +138,15 @@ export async function startCameraBarcodeScanner({
     throw new Error(getCameraScannerUnsupportedMessage());
   }
 
-  if (canUseNativeBarcodeDetector()) {
-    try {
-      return await startNativeBarcodeScanner(container, onDetected);
-    } catch (error) {
-      if (!shouldFallbackToNativeScanner(error)) {
-        throw error;
-      }
+  try {
+    return await startHtml5QrcodeScanner(container, onDetected);
+  } catch (error) {
+    if (!canUseNativeBarcodeDetector() || !shouldFallbackToNativeScanner(error)) {
+      throw error;
     }
   }
 
-  return startHtml5QrcodeScanner(container, onDetected);
+  return startNativeBarcodeScanner(container, onDetected);
 }
 
 function shouldFallbackToNativeScanner(error: unknown) {
@@ -158,6 +172,16 @@ async function startNativeBarcodeScanner(
     video: {
       facingMode: {
         ideal: "environment",
+      },
+      width: {
+        ideal: 1280,
+      },
+      height: {
+        ideal: 720,
+      },
+      frameRate: {
+        ideal: 24,
+        max: 30,
       },
     },
   });
@@ -253,6 +277,22 @@ async function startHtml5QrcodeScanner(
   onDetected: (result: BarcodeScanResult) => void,
 ): Promise<BarcodeScannerSession> {
   const Html5Qrcode = await loadHtml5Qrcode();
+  const { Html5QrcodeSupportedFormats } = (await import("html5-qrcode")) as Html5QrcodeModule & {
+    Html5QrcodeSupportedFormats: Html5QrcodeSupportedFormatsEnum;
+  };
+  const supportedFormats = [
+    Html5QrcodeSupportedFormats.CODE_128,
+    Html5QrcodeSupportedFormats.CODE_39,
+    Html5QrcodeSupportedFormats.CODE_93,
+    Html5QrcodeSupportedFormats.CODABAR,
+    Html5QrcodeSupportedFormats.EAN_13,
+    Html5QrcodeSupportedFormats.EAN_8,
+    Html5QrcodeSupportedFormats.ITF,
+    Html5QrcodeSupportedFormats.UPC_A,
+    Html5QrcodeSupportedFormats.UPC_E,
+    Html5QrcodeSupportedFormats.QR_CODE,
+    Html5QrcodeSupportedFormats.DATA_MATRIX,
+  ];
   const mountNode = document.createElement("div");
   const elementId = `pf-scanner-${Math.random().toString(36).slice(2, 10)}`;
   mountNode.id = elementId;
@@ -262,6 +302,7 @@ async function startHtml5QrcodeScanner(
   const scanner = new Html5Qrcode(elementId, {
     verbose: false,
     useBarCodeDetectorIfSupported: true,
+    formatsToSupport: supportedFormats,
   });
 
   let stopped = false;
@@ -294,10 +335,25 @@ async function startHtml5QrcodeScanner(
         facingMode: "environment",
       },
       {
-        fps: 12,
+        fps: 18,
         qrbox: getBarcodeScanBox,
         aspectRatio: 1.333334,
         disableFlip: false,
+        videoConstraints: {
+          facingMode: {
+            ideal: "environment",
+          },
+          width: {
+            ideal: 1280,
+          },
+          height: {
+            ideal: 720,
+          },
+          frameRate: {
+            ideal: 24,
+            max: 30,
+          },
+        },
       },
       async (decodedText, decodedResult) => {
         const text = decodedText.trim();
