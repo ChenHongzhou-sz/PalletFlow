@@ -72,6 +72,15 @@ type MaterialDistributionViewRow = {
   box_barcode: string | null;
 };
 
+const EXACT_MATERIAL_SEARCH_MATCHES = new Set([
+  "barcode",
+  "material_code_exact",
+  "material_alias_exact",
+  "short_code_exact",
+  "manufacturer_part_no_exact",
+  "internal_part_no_exact",
+]);
+
 export async function searchMaterials(query: string) {
   const db = requireSupabase();
   const trimmed = query.trim();
@@ -92,8 +101,12 @@ export async function searchMaterials(query: string) {
 
   const searchRows = ((rpcRows ?? []) as SearchMaterialsRpcRow[]).filter(Boolean);
 
-  const exactMaterialCodeRows = searchRows.filter((row) => row.material_code.trim().toUpperCase() === normalized);
-  const visibleRows = exactMaterialCodeRows.length ? exactMaterialCodeRows : searchRows;
+  const exactRows = searchRows.filter(
+    (row) =>
+      row.material_code.trim().toUpperCase() === normalized ||
+      EXACT_MATERIAL_SEARCH_MATCHES.has(row.matched_by),
+  );
+  const visibleRows = exactRows;
 
   if (!visibleRows.length) {
     return [] as MaterialSearchItem[];

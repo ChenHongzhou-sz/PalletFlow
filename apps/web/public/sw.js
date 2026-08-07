@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "palletflow-";
-const CACHE_NAME = `${CACHE_PREFIX}static-v2`;
+const CACHE_NAME = `${CACHE_PREFIX}static-v3`;
 const BASE_PATH = self.location.pathname.replace(/sw\.js$/, "");
 const OFFLINE_URL = `${BASE_PATH}offline.html`;
 const APP_SHELL = [

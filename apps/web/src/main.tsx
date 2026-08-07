@@ -11,9 +11,25 @@ function registerServiceWorker() {
   }
 
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
-      // Service worker registration should never block the app shell.
+    let reloadedForNewWorker = false;
+
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloadedForNewWorker) {
+        return;
+      }
+
+      reloadedForNewWorker = true;
+      window.location.reload();
     });
+
+    navigator.serviceWorker
+      .register(`${import.meta.env.BASE_URL}sw.js`)
+      .then((registration) => {
+        void registration.update();
+      })
+      .catch(() => {
+        // Service worker registration should never block the app shell.
+      });
   });
 }
 
