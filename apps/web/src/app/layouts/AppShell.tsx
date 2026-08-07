@@ -4,7 +4,7 @@ import { appRoutes } from "@/lib/constants/routes";
 const dockLinks = [
   { to: appRoutes.home, label: "首页" },
   { to: appRoutes.materialSearch, label: "查物料" },
-  { to: appRoutes.palletSearch, label: "查卡板" },
+  { to: appRoutes.palletSearch, label: "查库位" },
   { to: appRoutes.operationLogs, label: "日志" },
 ];
 

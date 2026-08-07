@@ -16,6 +16,8 @@ export interface MaterialSearchItem {
 export interface MaterialDistributionRow {
   batchId: string;
   palletCode: string;
+  locationCode: string;
+  locationType: string | null;
   quantity: number;
   productionDate: string;
   lotNo: string | null;
@@ -25,6 +27,9 @@ export interface MaterialDistributionRow {
 export interface PalletInventoryRow {
   batchId: string;
   palletCode: string;
+  locationCode: string;
+  locationName: string | null;
+  locationType: string | null;
   materialCode: string;
   shortCode: string | null;
   description: string | null;
@@ -39,6 +44,9 @@ export interface CurrentInventoryExportRow {
   warehouseCode: string;
   palletCode: string;
   palletArea: string | null;
+  locationCode: string;
+  locationName: string | null;
+  locationType: string | null;
   materialCode: string;
   shortCode: string | null;
   description: string | null;
@@ -58,6 +66,10 @@ export interface PalletLookupItem {
   warehouseCode: string;
   palletCode: string;
   palletArea: string | null;
+  locationCode: string;
+  locationName: string | null;
+  locationType: string;
+  isTemporary: boolean;
   status: string;
   createdAt: string;
   activeBatchCount: number;
@@ -80,6 +92,9 @@ export interface OperationLogRow {
   createdAt: string;
   operatorName: string | null;
   palletCode: string;
+  locationCode: string;
+  locationName: string | null;
+  locationType: string | null;
   materialCode: string;
   shortCode: string | null;
   quantityChange: number;

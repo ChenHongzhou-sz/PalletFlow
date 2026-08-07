@@ -108,19 +108,20 @@ export function InboundPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="Inbound" title="进卡板" description="按现场节奏压成 3 步：卡板、物料、数量和批次。卡板如果不存在，会在正式写入时自动建立。" />
+      <PageHeader eyebrow="Inbound" title="入库" description="按现场节奏压成 3 步：库位、物料、数量和批次。库位如果不存在，会在正式写入时自动建立。" />
       <ConfigNotice />
 
       <section className="pf-panel space-y-5 p-5">
-        <StepStrip current={currentStep} labels={["卡板", "物料", "保存"]} />
+        <StepStrip current={currentStep} labels={["库位", "物料", "保存"]} />
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <PalletCodeField
-            label="1. 卡板号"
+            label="1. 目标库位"
             value={palletCode}
-            placeholder="例如 A01"
+            placeholder="例如 P01、M01、S01、IN-01"
             onChange={setPalletCode}
             allowCustom
+            helperText="优先使用已初始化库位；如输入新库位，系统会按编码自动识别类型并建立。"
           />
 
           <SearchField
@@ -187,7 +188,7 @@ export function InboundPage() {
           {message ? <div className="rounded-3xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</div> : null}
 
           <button type="submit" disabled={submitting} className="pf-button-primary w-full">
-            {submitting ? "正在保存..." : "保存入卡板"}
+            {submitting ? "正在保存..." : "保存入库"}
           </button>
         </form>
       </section>

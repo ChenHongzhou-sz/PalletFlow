@@ -15,7 +15,7 @@ export function InventoryExportPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [lastExportedAt, setLastExportedAt] = useState<string | null>(null);
   const [lastBatchCount, setLastBatchCount] = useState<number>(0);
-  const [lastPalletCount, setLastPalletCount] = useState<number>(0);
+  const [lastLocationCount, setLastLocationCount] = useState<number>(0);
   const [lastMaterialCount, setLastMaterialCount] = useState<number>(0);
   const [lastTotalQuantity, setLastTotalQuantity] = useState<number>(0);
 
@@ -30,7 +30,7 @@ export function InventoryExportPage() {
       if (!rows.length) {
         setLastExportedAt(null);
         setLastBatchCount(0);
-        setLastPalletCount(0);
+        setLastLocationCount(0);
         setLastMaterialCount(0);
         setLastTotalQuantity(0);
         setMessage("当前没有在库批次，暂时没有可导出的库存明细。");
@@ -42,10 +42,10 @@ export function InventoryExportPage() {
 
       setLastExportedAt(new Date().toISOString());
       setLastBatchCount(summary.batchCount);
-      setLastPalletCount(summary.palletCount);
+      setLastLocationCount(summary.locationCount);
       setLastMaterialCount(summary.materialCount);
       setLastTotalQuantity(summary.totalQuantity);
-      setMessage(`已导出 ${summary.batchCount} 条在库批次，覆盖 ${summary.palletCount} 个卡板。`);
+      setMessage(`已导出 ${summary.batchCount} 条在库批次，覆盖 ${summary.locationCount} 个库位。`);
     } catch (reason) {
       setError(resolveErrorMessage(reason));
     } finally {
@@ -58,14 +58,14 @@ export function InventoryExportPage() {
       <PageHeader
         eyebrow="Inventory Export"
         title="数据导出"
-        description="一键导出当前所有卡板的在库批次，给仓库、采购或管理层直接看库存分布。"
+        description="一键导出当前所有库位的在库批次，给仓库、采购或管理层直接看库存分布。"
       />
       <ConfigNotice />
 
       <section className="pf-panel space-y-5 p-5">
         <div className="rounded-[1.8rem] bg-slate-100/85 p-4 text-sm leading-7 text-slate-600">
-          导出的 Excel 会包含当前还在库的全部批次，字段包括仓库、卡板号、卡板位置、物料型号、简称、描述、数量、
-          生产年月、批次号、外箱条码、入板时间和最后更新时间。
+          导出的 Excel 会包含当前还在库的全部批次，字段包括仓库、库位号、库位名称、库位类型、物料型号、简称、描述、数量、
+          生产年月、批次号、外箱条码、入库时间和最后更新时间。
         </div>
 
         <button type="button" onClick={handleExportCurrentInventory} disabled={exporting} className="pf-button-primary w-full">
@@ -80,7 +80,7 @@ export function InventoryExportPage() {
         <>
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard label="在库批次" value={String(lastBatchCount)} tone="dark" />
-            <StatCard label="卡板数量" value={String(lastPalletCount)} />
+            <StatCard label="库位数量" value={String(lastLocationCount)} />
             <StatCard label="物料种数" value={String(lastMaterialCount)} />
             <StatCard label="总数量" value={`${formatQuantity(lastTotalQuantity)} PCS`} tone="accent" />
           </section>

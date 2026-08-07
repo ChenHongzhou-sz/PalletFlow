@@ -22,7 +22,9 @@ type MaterialSummaryRow = {
 
 type CurrentInventoryBatchRow = {
   batch_id: string;
-  pallet_code: string;
+  location_code: string;
+  location_name: string | null;
+  location_type: string | null;
   material_code: string;
   short_code: string | null;
   description: string | null;
@@ -33,10 +35,12 @@ type CurrentInventoryBatchRow = {
 };
 
 type PalletLookupViewRow = {
-  pallet_id: string;
+  location_id: string;
   warehouse_code: string;
-  pallet_code: string;
-  pallet_area: string | null;
+  location_code: string;
+  location_name: string | null;
+  location_type: string;
+  is_temporary: boolean;
   status: string;
   created_at: string;
   active_batch_count: number;
@@ -44,7 +48,8 @@ type PalletLookupViewRow = {
 
 type MaterialDistributionViewRow = {
   batch_id: string;
-  pallet_code: string;
+  location_code: string;
+  location_type: string | null;
   quantity: number;
   production_date: string;
   lot_no: string | null;
@@ -112,7 +117,7 @@ export async function getMaterialDistribution(materialCode: string) {
   const db = requireSupabase();
   const { data, error } = await db
     .from("v_current_inventory_batches")
-    .select("batch_id, pallet_code, quantity, production_date, lot_no, box_barcode")
+    .select("batch_id, location_code, location_type, quantity, production_date, lot_no, box_barcode")
     .eq("material_code", materialCode)
     .order("production_date", { ascending: true })
     .order("created_at", { ascending: true });
@@ -123,7 +128,9 @@ export async function getMaterialDistribution(materialCode: string) {
 
   return ((data ?? []) as MaterialDistributionViewRow[]).map((row) => ({
     batchId: row.batch_id,
-    palletCode: row.pallet_code,
+    palletCode: row.location_code,
+    locationCode: row.location_code,
+    locationType: row.location_type ?? null,
     quantity: Number(row.quantity ?? 0),
     productionDate: row.production_date,
     lotNo: row.lot_no ?? null,
@@ -141,8 +148,8 @@ export async function getPalletInventory(palletCode: string) {
 
   const { data, error } = await db
     .from("v_current_inventory_batches")
-    .select("batch_id, pallet_code, material_code, short_code, description, quantity, production_date, lot_no, box_barcode")
-    .eq("pallet_code", normalized)
+    .select("batch_id, location_code, location_name, location_type, material_code, short_code, description, quantity, production_date, lot_no, box_barcode")
+    .eq("location_code", normalized)
     .order("production_date", { ascending: true })
     .order("material_code", { ascending: true });
 
@@ -152,7 +159,10 @@ export async function getPalletInventory(palletCode: string) {
 
   return ((data ?? []) as CurrentInventoryBatchRow[]).map((row) => ({
     batchId: row.batch_id,
-    palletCode: row.pallet_code,
+    palletCode: row.location_code,
+    locationCode: row.location_code,
+    locationName: row.location_name ?? null,
+    locationType: row.location_type ?? null,
     materialCode: row.material_code,
     shortCode: row.short_code,
     description: row.description,
@@ -168,13 +178,13 @@ export async function listPalletLookupItems(query: string, limit = 8) {
   const normalized = query.trim().toUpperCase();
 
   let request = db
-    .from("v_pallet_lookup")
-    .select("pallet_id, warehouse_code, pallet_code, pallet_area, status, created_at, active_batch_count")
-    .order("pallet_code", { ascending: true })
+    .from("v_location_lookup")
+    .select("location_id, warehouse_code, location_code, location_name, location_type, is_temporary, status, created_at, active_batch_count")
+    .order("location_code", { ascending: true })
     .limit(limit * 3);
 
   if (normalized) {
-    request = request.ilike("pallet_code", `%${normalized}%`);
+    request = request.ilike("location_code", `%${normalized}%`);
   }
 
   const { data, error } = await request;
@@ -186,10 +196,14 @@ export async function listPalletLookupItems(query: string, limit = 8) {
   const rows = ((data ?? []) as PalletLookupViewRow[])
     .map(
       (row): PalletLookupItem => ({
-        palletId: row.pallet_id,
+        palletId: row.location_id,
         warehouseCode: row.warehouse_code,
-        palletCode: row.pallet_code,
-        palletArea: row.pallet_area ?? null,
+        palletCode: row.location_code,
+        palletArea: row.location_name ?? null,
+        locationCode: row.location_code,
+        locationName: row.location_name ?? null,
+        locationType: row.location_type,
+        isTemporary: row.is_temporary,
         status: row.status,
         createdAt: row.created_at,
         activeBatchCount: Number(row.active_batch_count ?? 0),

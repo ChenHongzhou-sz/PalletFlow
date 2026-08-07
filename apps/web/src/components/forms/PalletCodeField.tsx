@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { formatLocationType } from "@/lib/formatters/location";
 import { listPalletLookupItems } from "@/services/search/search-service";
 import type { PalletLookupItem } from "@/types/domain";
 
@@ -58,7 +59,7 @@ export function PalletCodeField({
   }, [deferredValue]);
 
   const exactMatch = useMemo(
-    () => options.some((item) => item.palletCode.toUpperCase() === deferredValue),
+    () => options.some((item) => item.locationCode.toUpperCase() === deferredValue),
     [deferredValue, options],
   );
 
@@ -81,7 +82,7 @@ export function PalletCodeField({
         {showDropdown ? (
           <div className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-[1.4rem] border border-slate-200 bg-white p-2 shadow-card">
             {loading ? (
-              <p className="px-3 py-2 text-sm text-slate-500">正在匹配现有卡板...</p>
+              <p className="px-3 py-2 text-sm text-slate-500">正在匹配现有库位...</p>
             ) : null}
 
             {!loading && options.length > 0 ? (
@@ -92,19 +93,19 @@ export function PalletCodeField({
                     type="button"
                     onMouseDown={(event) => {
                       event.preventDefault();
-                      onChange(item.palletCode);
+                      onChange(item.locationCode);
                       setFocused(false);
                     }}
                     className={`block w-full rounded-[1.1rem] px-3 py-3 text-left transition ${
-                      item.palletCode.toUpperCase() === deferredValue ? "bg-ember/[0.18]" : "bg-slate-50 hover:bg-slate-100"
+                      item.locationCode.toUpperCase() === deferredValue ? "bg-ember/[0.18]" : "bg-slate-50 hover:bg-slate-100"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold text-ink">{item.palletCode}</p>
+                      <p className="font-semibold text-ink">{item.locationCode}</p>
                       <span className="text-xs text-slate-500">{item.activeBatchCount} 个在库批次</span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      {item.palletArea ? `位置 ${item.palletArea}` : "未设置位置"} · 状态 {item.status}
+                      {formatLocationType(item.locationType)} {item.locationName ? `· ${item.locationName}` : ""} {item.isTemporary ? "· 临时库位" : ""} · 状态 {item.status}
                     </p>
                   </button>
                 ))}
@@ -113,7 +114,7 @@ export function PalletCodeField({
 
             {!loading && !options.length && deferredValue ? (
               <p className="px-3 py-2 text-sm text-slate-500">
-                {allowCustom ? `未找到现有卡板 ${deferredValue}，可以继续按新卡板保存。` : "没有匹配的现有卡板。"}
+                {allowCustom ? `未找到现有库位 ${deferredValue}，可以继续按新库位保存。` : "没有匹配的现有库位。"}
               </p>
             ) : null}
           </div>
@@ -122,7 +123,7 @@ export function PalletCodeField({
 
       {helperText ? <p className="mt-2 text-xs leading-5 text-slate-500">{helperText}</p> : null}
       {!helperText && allowCustom && deferredValue && !exactMatch ? (
-        <p className="mt-2 text-xs leading-5 text-slate-500">如果这是一个新卡板，直接继续保存，系统会在入库时自动建立。</p>
+        <p className="mt-2 text-xs leading-5 text-slate-500">如果这是一个新库位，直接继续保存，系统会在入库时自动建立。</p>
       ) : null}
     </label>
   );

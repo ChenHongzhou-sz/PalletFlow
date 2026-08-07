@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/feedback/EmptyState";
 import { PageHeader } from "@/components/mobile/PageHeader";
 import { resolveErrorMessage } from "@/lib/api/errors";
 import { formatDateTime, formatProductionMonth } from "@/lib/formatters/date";
+import { formatLocationType } from "@/lib/formatters/location";
 import { formatQuantity } from "@/lib/formatters/number";
 import { listOperationLogs } from "@/services/logs/log-service";
 import type { OperationLogRow } from "@/types/domain";
@@ -45,7 +46,7 @@ export function OperationLogPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="Operation Logs" title="操作记录" description="查看进卡板、出卡板、盘点、清空卡板的历史记录，支持按日期、卡板和物料过滤。" />
+      <PageHeader eyebrow="Operation Logs" title="操作记录" description="查看入库、出库、盘点、清空库位的历史记录，支持按日期、库位和物料过滤。" />
       <ConfigNotice />
 
       <section className="pf-panel grid gap-4 p-5 lg:grid-cols-4">
@@ -58,8 +59,8 @@ export function OperationLogPage() {
           <input className="pf-input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
         </label>
         <label className="block">
-          <span className="mb-2 block text-sm font-semibold text-slate-600">卡板</span>
-          <input className="pf-input" value={palletCode} onChange={(event) => setPalletCode(event.target.value.toUpperCase())} placeholder="A01" />
+          <span className="mb-2 block text-sm font-semibold text-slate-600">库位</span>
+          <input className="pf-input" value={palletCode} onChange={(event) => setPalletCode(event.target.value.toUpperCase())} placeholder="P01 / S01 / IN-01" />
         </label>
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-slate-600">物料</span>
@@ -86,11 +87,11 @@ export function OperationLogPage() {
                   <span className="pf-pill bg-slate-100 text-slate-600">{formatDateTime(row.createdAt)}</span>
                 </div>
                 <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                  {row.palletCode} · {row.shortCode || row.materialCode}
+                  {row.locationCode} · {row.shortCode || row.materialCode}
                 </p>
                 <p className="mt-1 text-sm text-slate-600">{row.materialCode}</p>
                 <p className="mt-3 text-xs text-slate-500">
-                  生产年月 {formatProductionMonth(row.productionDate)}
+                  {row.locationType ? `${formatLocationType(row.locationType)} · ` : ""}生产年月 {formatProductionMonth(row.productionDate)}
                   {row.lotNo ? ` · 批次 ${row.lotNo}` : ""}
                   {row.operatorName ? ` · 操作人 ${row.operatorName}` : ""}
                 </p>
@@ -116,4 +117,3 @@ export function OperationLogPage() {
     </div>
   );
 }
-

@@ -14,6 +14,9 @@ type OperationLogViewRow = {
   created_at: string;
   operator_name: string | null;
   pallet_code: string;
+  location_code: string;
+  location_name: string | null;
+  location_type: string | null;
   material_code: string;
   short_code: string | null;
   quantity_change: number;
@@ -30,7 +33,7 @@ export async function listOperationLogs(filters: LogFilters) {
   let query = db
     .from("v_operation_log_lines")
     .select(
-      "operation_id, operation_type, created_at, operator_name, pallet_code, material_code, short_code, quantity_change, quantity_before, quantity_after, production_date, lot_no, operation_note, line_remark",
+      "operation_id, operation_type, created_at, operator_name, pallet_code, location_code, location_name, location_type, material_code, short_code, quantity_change, quantity_before, quantity_after, production_date, lot_no, operation_note, line_remark",
     )
     .order("created_at", { ascending: false })
     .limit(100);
@@ -44,7 +47,7 @@ export async function listOperationLogs(filters: LogFilters) {
   }
 
   if (filters.palletCode?.trim()) {
-    query = query.ilike("pallet_code", `%${filters.palletCode.trim().toUpperCase()}%`);
+    query = query.ilike("location_code", `%${filters.palletCode.trim().toUpperCase()}%`);
   }
 
   if (filters.materialCode?.trim()) {
@@ -66,6 +69,9 @@ export async function listOperationLogs(filters: LogFilters) {
     createdAt: row.created_at,
     operatorName: row.operator_name,
     palletCode: row.pallet_code,
+    locationCode: row.location_code,
+    locationName: row.location_name ?? null,
+    locationType: row.location_type ?? null,
     materialCode: row.material_code,
     shortCode: row.short_code,
     quantityChange: Number(row.quantity_change ?? 0),

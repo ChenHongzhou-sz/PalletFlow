@@ -1,4 +1,5 @@
 import type { CurrentInventoryExportRow } from "@/types/domain";
+import { formatLocationType } from "@/lib/formatters/location";
 
 function formatTimestampForFile(value: Date) {
   const year = value.getFullYear();
@@ -29,20 +30,20 @@ function formatDateTime(value: string) {
 export interface InventoryExportSummary {
   exportedAt: string;
   batchCount: number;
-  palletCount: number;
+  locationCount: number;
   materialCount: number;
   totalQuantity: number;
 }
 
 export function buildInventoryExportSummary(rows: CurrentInventoryExportRow[]): InventoryExportSummary {
-  const palletCodes = new Set(rows.map((row) => `${row.warehouseCode}:${row.palletCode}`));
+  const locationCodes = new Set(rows.map((row) => `${row.warehouseCode}:${row.locationCode || row.palletCode}`));
   const materialCodes = new Set(rows.map((row) => row.materialCode));
   const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
 
   return {
     exportedAt: formatDateTime(new Date().toISOString()),
     batchCount: rows.length,
-    palletCount: palletCodes.size,
+    locationCount: locationCodes.size,
     materialCount: materialCodes.size,
     totalQuantity,
   };
@@ -54,8 +55,9 @@ export async function exportCurrentInventoryWorkbook(rows: CurrentInventoryExpor
 
   const detailRows = rows.map((row) => ({
     仓库: row.warehouseCode,
-    卡板号: row.palletCode,
-    卡板位置: row.palletArea || row.palletCode,
+    库位号: row.locationCode || row.palletCode,
+    库位名称: row.locationName || row.palletArea || row.palletCode,
+    库位类型: formatLocationType(row.locationType),
     物料型号: row.materialCode,
     物料简称: row.shortCode || "",
     描述: row.description || "",
@@ -65,14 +67,14 @@ export async function exportCurrentInventoryWorkbook(rows: CurrentInventoryExpor
     生产年月: row.productionDate.slice(0, 7),
     批次号: row.lotNo || "",
     外箱条码: row.boxBarcode || "",
-    入板时间: formatDateTime(row.inboundAt),
+    入库时间: formatDateTime(row.inboundAt),
     最后更新时间: formatDateTime(row.lastUpdatedAt),
   }));
 
   const summaryRows = [
     { 指标: "导出时间", 值: summary.exportedAt },
     { 指标: "在库批次数", 值: summary.batchCount },
-    { 指标: "在库卡板数", 值: summary.palletCount },
+    { 指标: "在库库位数", 值: summary.locationCount },
     { 指标: "在库物料种数", 值: summary.materialCount },
     { 指标: "总数量", 值: summary.totalQuantity },
   ];
@@ -84,8 +86,9 @@ export async function exportCurrentInventoryWorkbook(rows: CurrentInventoryExpor
   summarySheet["!cols"] = [{ wch: 16 }, { wch: 20 }];
   detailSheet["!cols"] = [
     { wch: 10 },
-    { wch: 10 },
     { wch: 14 },
+    { wch: 14 },
+    { wch: 16 },
     { wch: 24 },
     { wch: 18 },
     { wch: 28 },

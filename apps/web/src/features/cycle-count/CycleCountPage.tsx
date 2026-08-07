@@ -96,17 +96,17 @@ export function CycleCountPage() {
       <PageHeader
         eyebrow="Cycle Count"
         title="盘点"
-        description="从卡板开始盘点，系统先拉出当前库存，再由你录入实际数量并生成差异。"
+        description="从库位开始盘点，系统先拉出当前库存，再由你录入实际数量并生成差异。"
       />
       <ConfigNotice />
 
       <section className="pf-panel space-y-4 p-5">
         <PalletCodeField
-          label="盘点卡板号"
+          label="盘点库位号"
           value={palletCode}
-          placeholder="例如 A01"
+          placeholder="例如 P01、S01、OUT-01"
           onChange={handlePalletCodeChange}
-          helperText="建议从已有卡板里直接选，减少手输错误。"
+          helperText="建议从已有库位里直接选，减少手输错误。"
         />
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-slate-600">操作人</span>
@@ -126,7 +126,7 @@ export function CycleCountPage() {
       {message ? <div className="pf-panel border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-800">{message}</div> : null}
 
       {!rows.length ? (
-        <EmptyState title="先选择一个卡板开始盘点" description="系统会按当前卡板上的批次逐行给出系统数量，你只需要输入实际数量即可。" />
+        <EmptyState title="先选择一个库位开始盘点" description="系统会按当前库位上的批次逐行给出系统数量，你只需要输入实际数量即可。" />
       ) : (
         <>
           <section className="space-y-3">

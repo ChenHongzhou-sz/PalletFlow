@@ -6,6 +6,9 @@ type InventoryExportViewRow = {
   warehouse_code: string;
   pallet_code: string;
   pallet_area: string | null;
+  location_code: string;
+  location_name: string | null;
+  location_type: string | null;
   material_code: string;
   short_code: string | null;
   description: string | null;
@@ -25,10 +28,10 @@ export async function listCurrentInventoryExportRows() {
   const { data, error } = await db
     .from("v_inventory_export_rows")
     .select(
-      "batch_id, warehouse_code, pallet_code, pallet_area, material_code, short_code, description, category, specification, quantity, initial_quantity, production_date, lot_no, box_barcode, inbound_at, last_updated_at",
+      "batch_id, warehouse_code, pallet_code, pallet_area, location_code, location_name, location_type, material_code, short_code, description, category, specification, quantity, initial_quantity, production_date, lot_no, box_barcode, inbound_at, last_updated_at",
     )
     .order("warehouse_code", { ascending: true })
-    .order("pallet_code", { ascending: true })
+    .order("location_code", { ascending: true })
     .order("material_code", { ascending: true })
     .order("production_date", { ascending: true })
     .order("inbound_at", { ascending: true });
@@ -43,6 +46,9 @@ export async function listCurrentInventoryExportRows() {
       warehouseCode: row.warehouse_code,
       palletCode: row.pallet_code,
       palletArea: row.pallet_area ?? null,
+      locationCode: row.location_code,
+      locationName: row.location_name ?? null,
+      locationType: row.location_type ?? null,
       materialCode: row.material_code,
       shortCode: row.short_code ?? null,
       description: row.description ?? null,

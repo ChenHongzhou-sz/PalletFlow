@@ -118,7 +118,7 @@ export function OutboundPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="Outbound" title="出卡板" description="先找物料，再填需求数量，系统按生产年月自动给出 FIFO 扣减建议。" />
+      <PageHeader eyebrow="Outbound" title="出库" description="先找物料，再填需求数量，系统按生产年月自动给出 FIFO 库位扣减建议。" />
       <ConfigNotice />
 
       <section className="pf-panel space-y-5 p-5">

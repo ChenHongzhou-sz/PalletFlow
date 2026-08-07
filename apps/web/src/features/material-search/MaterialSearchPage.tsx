@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/mobile/PageHeader";
 import { ScanActionButton } from "@/components/scanner/ScanActionButton";
 import { resolveErrorMessage } from "@/lib/api/errors";
 import { formatProductionMonth, formatDateTime } from "@/lib/formatters/date";
+import { formatLocationType } from "@/lib/formatters/location";
 import { formatQuantity } from "@/lib/formatters/number";
 import { getMaterialDistribution, searchMaterials } from "@/services/search/search-service";
 import type { MaterialDistributionRow, MaterialSearchItem } from "@/types/domain";
@@ -91,7 +92,7 @@ export function MaterialSearchPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="Search Material" title="查物料" description="支持完整料号、简称、描述和条码入口。先找到物料，再看它分布在哪些卡板。" />
+      <PageHeader eyebrow="Search Material" title="查物料" description="支持完整料号、简称、描述和条码入口。先找到物料，再看它分布在哪些库位。" />
       <ConfigNotice />
 
       <section className="pf-panel space-y-4 p-5">
@@ -157,7 +158,7 @@ export function MaterialSearchPage() {
                 <p className="mt-4 text-sm leading-7 text-slate-600">{selected.description || "暂无描述"}</p>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <StatCard label="总库存" value={`${formatQuantity(selected.totalQuantity)} PCS`} tone="dark" />
-                  <StatCard label="卡板数" value={String(selected.palletCount)} />
+                  <StatCard label="库位数" value={String(selected.palletCount)} />
                   <StatCard label="最早生产" value={formatProductionMonth(selected.earliestProductionDate)} />
                   <StatCard label="最新生产" value={formatProductionMonth(selected.latestProductionDate)} tone="accent" />
                 </div>
@@ -173,9 +174,9 @@ export function MaterialSearchPage() {
                     <div key={row.batchId} className="rounded-[1.6rem] bg-slate-100/90 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="font-display text-xl font-semibold text-ink">{row.palletCode}</p>
+                          <p className="font-display text-xl font-semibold text-ink">{row.locationCode}</p>
                           <p className="mt-1 text-sm text-slate-600">
-                            生产年月 {formatProductionMonth(row.productionDate)} {row.lotNo ? `· 批次 ${row.lotNo}` : ""}
+                            {row.locationType ? `${formatLocationType(row.locationType)} · ` : ""}生产年月 {formatProductionMonth(row.productionDate)} {row.lotNo ? `· 批次 ${row.lotNo}` : ""}
                           </p>
                           {row.boxBarcode ? <p className="mt-1 text-xs text-slate-500">外箱条码 {row.boxBarcode}</p> : null}
                         </div>
@@ -184,11 +185,11 @@ export function MaterialSearchPage() {
                     </div>
                   ))}
                 </div>
-                <p className="mt-4 text-xs text-slate-500">明细更新时间跟随正式数据库写入。缓存清空不会删除这些原始库存数据。</p>
+                <p className="mt-4 text-xs text-slate-500">明细更新时间跟随正式数据库写入。缓存清空不会删除这些原始库位库存数据。</p>
               </div>
             </>
           ) : (
-            <EmptyState title="搜索结果会显示在这里" description="选中某个物料后，就会看到总库存、卡板数和按 FIFO 排序的分布明细。" />
+            <EmptyState title="搜索结果会显示在这里" description="选中某个物料后，就会看到总库存、库位数和按 FIFO 排序的分布明细。" />
           )}
         </section>
       </div>
