@@ -160,7 +160,7 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
             <div ref={previewRef} className="pf-scanner-preview h-full w-full" />
             {!error ? (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="h-28 w-[86%] rounded-[1.75rem] border-2 border-dashed border-white/80 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.18)] sm:h-32" />
+                <div className="aspect-square w-[72%] max-w-[18rem] rounded-[1.75rem] border-2 border-dashed border-white/80 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.18)]" />
               </div>
             ) : null}
           </div>

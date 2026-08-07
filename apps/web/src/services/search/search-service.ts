@@ -81,6 +81,10 @@ const EXACT_MATERIAL_SEARCH_MATCHES = new Set([
   "internal_part_no_exact",
 ]);
 
+function shouldRestrictToExactMaterialMatches(query: string) {
+  return !/\s/gu.test(query) && /^[A-Za-z0-9_./+-]+$/u.test(query);
+}
+
 export async function searchMaterials(query: string) {
   const db = requireSupabase();
   const trimmed = query.trim();
@@ -106,7 +110,10 @@ export async function searchMaterials(query: string) {
       row.material_code.trim().toUpperCase() === normalized ||
       EXACT_MATERIAL_SEARCH_MATCHES.has(row.matched_by),
   );
-  const visibleRows = exactRows;
+  const visibleRows =
+    exactRows.length > 0 && shouldRestrictToExactMaterialMatches(trimmed)
+      ? exactRows
+      : searchRows;
 
   if (!visibleRows.length) {
     return [] as MaterialSearchItem[];

@@ -60,7 +60,12 @@ type Html5QrcodeInstance = {
 
 type Html5QrcodeConstructor = new (
   elementId: string,
-  config?: boolean | { verbose?: boolean },
+  config?:
+    | boolean
+    | {
+        verbose?: boolean;
+        useBarCodeDetectorIfSupported?: boolean;
+      },
 ) => Html5QrcodeInstance;
 
 type Html5QrcodeModule = typeof import("html5-qrcode");
@@ -89,12 +94,11 @@ interface StartBarcodeScannerOptions {
 let html5QrcodeLoader: Promise<Html5QrcodeConstructor> | null = null;
 
 function getBarcodeScanBox(viewfinderWidth: number, viewfinderHeight: number) {
-  const width = Math.max(220, Math.min(Math.floor(viewfinderWidth * 0.88), 380));
-  const height = Math.max(90, Math.min(Math.floor(viewfinderHeight * 0.24), 140));
+  const edge = Math.max(220, Math.min(Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.74), 320));
 
   return {
-    width,
-    height,
+    width: edge,
+    height: edge,
   };
 }
 
@@ -118,15 +122,17 @@ export async function startCameraBarcodeScanner({
     throw new Error(getCameraScannerUnsupportedMessage());
   }
 
-  try {
-    return await startHtml5QrcodeScanner(container, onDetected);
-  } catch (error) {
-    if (!canUseNativeBarcodeDetector() || !shouldFallbackToNativeScanner(error)) {
-      throw error;
+  if (canUseNativeBarcodeDetector()) {
+    try {
+      return await startNativeBarcodeScanner(container, onDetected);
+    } catch (error) {
+      if (!shouldFallbackToNativeScanner(error)) {
+        throw error;
+      }
     }
   }
 
-  return startNativeBarcodeScanner(container, onDetected);
+  return startHtml5QrcodeScanner(container, onDetected);
 }
 
 function shouldFallbackToNativeScanner(error: unknown) {
@@ -255,6 +261,7 @@ async function startHtml5QrcodeScanner(
 
   const scanner = new Html5Qrcode(elementId, {
     verbose: false,
+    useBarCodeDetectorIfSupported: true,
   });
 
   let stopped = false;
