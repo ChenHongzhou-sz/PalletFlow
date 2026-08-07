@@ -152,8 +152,7 @@ export function OutboundPage() {
                     onClick={() => setSelectedMaterialCode(item.materialCode)}
                     className={`rounded-[1.5rem] border p-4 text-left ${isActive ? "border-ember bg-ember/[0.12]" : "border-slate-200 bg-white"}`}
                   >
-                    <p className="font-display text-xl font-semibold text-ink">{item.shortCode || item.materialCode}</p>
-                    <p className="mt-1 text-xs text-slate-500">{item.materialCode}</p>
+                    <p className="font-display text-xl font-semibold text-ink">{item.materialCode}</p>
                     <p className="mt-2 text-sm text-slate-600">{item.description || "暂无描述"}</p>
                   </button>
                 );

@@ -63,8 +63,7 @@ function formatPackValue(value: number | null | undefined) {
 }
 
 function buildRecentViewLabel(item: MaterialSearchItem) {
-  const head = item.shortCode || item.materialCode;
-  return item.series ? `${head} / ${item.series}` : head;
+  return item.materialCode;
 }
 
 function buildSpecChips(item: MaterialSearchItem) {
@@ -305,8 +304,7 @@ export function MaterialSearchPage() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="font-display text-2xl font-semibold text-ink">{item.shortCode || item.materialCode}</p>
-                    <p className="mt-1 text-sm font-medium text-slate-600">{item.materialCode}</p>
+                    <p className="font-display text-2xl font-semibold text-ink">{item.materialCode}</p>
                     <p className="mt-3 text-sm leading-6 text-slate-600">{item.description || item.specificationRaw || "暂无描述"}</p>
                   </div>
                   <span className="pf-pill bg-slate-100 text-slate-600">{formatMatchedByLabel(item.matchedBy)}</span>
@@ -340,8 +338,7 @@ export function MaterialSearchPage() {
             <>
               <div className="pf-panel p-5">
                 <p className="text-sm font-semibold text-slate-500">当前物料</p>
-                <h2 className="mt-2 font-display text-3xl font-semibold text-ink">{selected.shortCode || selected.materialCode}</h2>
-                <p className="mt-1 text-sm font-medium text-slate-600">{selected.materialCode}</p>
+                <h2 className="mt-2 font-display text-3xl font-semibold text-ink">{selected.materialCode}</h2>
                 <p className="mt-4 text-sm leading-7 text-slate-600">{selected.description || selected.specificationRaw || "暂无描述"}</p>
 
                 {selectedChips.length ? (

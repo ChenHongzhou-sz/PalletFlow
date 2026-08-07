@@ -75,6 +75,7 @@ type MaterialDistributionViewRow = {
 export async function searchMaterials(query: string) {
   const db = requireSupabase();
   const trimmed = query.trim();
+  const normalized = trimmed.toUpperCase();
 
   if (trimmed.length < 2) {
     return [] as MaterialSearchItem[];
@@ -91,11 +92,14 @@ export async function searchMaterials(query: string) {
 
   const searchRows = ((rpcRows ?? []) as SearchMaterialsRpcRow[]).filter(Boolean);
 
-  if (!searchRows.length) {
+  const exactMaterialCodeRows = searchRows.filter((row) => row.material_code.trim().toUpperCase() === normalized);
+  const visibleRows = exactMaterialCodeRows.length ? exactMaterialCodeRows : searchRows;
+
+  if (!visibleRows.length) {
     return [] as MaterialSearchItem[];
   }
 
-  return searchRows.map((row) => {
+  return visibleRows.map((row) => {
     return {
       materialId: row.material_id,
       materialCode: row.material_code,
