@@ -8,14 +8,27 @@ type SearchMaterialsRpcRow = {
   description: string | null;
   category: string | null;
   specification: string | null;
+  specification_raw: string | null;
+  brand: string | null;
+  series: string | null;
+  manufacturer_part_no: string | null;
+  internal_part_no: string | null;
+  voltage_v: number | null;
+  capacitance_value: number | null;
+  capacitance_unit: string | null;
+  diameter_mm: number | null;
+  height_mm: number | null;
+  lifetime_h: number | null;
+  temperature_c: number | null;
+  standard_box_qty: number | null;
+  moq: number | null;
+  mpq: number | null;
   matched_by: string;
   score: number;
-};
-
-type MaterialSummaryRow = {
-  material_id: string;
   total_quantity: number;
-  pallet_count: number;
+  location_count: number;
+  open_quantity: number;
+  oldest_date_code: string | null;
   earliest_production_date: string | null;
   latest_production_date: string | null;
 };
@@ -52,6 +65,9 @@ type MaterialDistributionViewRow = {
   location_type: string | null;
   quantity: number;
   production_date: string;
+  date_code: string | null;
+  stock_form: string | null;
+  received_at: string | null;
   lot_no: string | null;
   box_barcode: string | null;
 };
@@ -79,23 +95,7 @@ export async function searchMaterials(query: string) {
     return [] as MaterialSearchItem[];
   }
 
-  const materialIds = searchRows.map((row) => row.material_id);
-  const { data: summaryRows, error: summaryError } = await db
-    .from("v_material_inventory_summary")
-    .select("material_id, total_quantity, pallet_count, earliest_production_date, latest_production_date")
-    .in("material_id", materialIds);
-
-  if (summaryError) {
-    throw new Error(summaryError.message);
-  }
-
-  const summaryMap = new Map<string, MaterialSummaryRow>(
-    ((summaryRows ?? []) as MaterialSummaryRow[]).map((row) => [row.material_id, row]),
-  );
-
   return searchRows.map((row) => {
-    const summary = summaryMap.get(row.material_id);
-
     return {
       materialId: row.material_id,
       materialCode: row.material_code,
@@ -103,12 +103,30 @@ export async function searchMaterials(query: string) {
       description: row.description,
       category: row.category,
       specification: row.specification,
+      specificationRaw: row.specification_raw ?? null,
+      brand: row.brand ?? null,
+      series: row.series ?? null,
+      manufacturerPartNo: row.manufacturer_part_no ?? null,
+      internalPartNo: row.internal_part_no ?? null,
+      voltageV: row.voltage_v ?? null,
+      capacitanceValue: row.capacitance_value ?? null,
+      capacitanceUnit: row.capacitance_unit ?? null,
+      diameterMm: row.diameter_mm ?? null,
+      heightMm: row.height_mm ?? null,
+      lifetimeH: row.lifetime_h ?? null,
+      temperatureC: row.temperature_c ?? null,
+      standardBoxQty: row.standard_box_qty ?? null,
+      moq: row.moq ?? null,
+      mpq: row.mpq ?? null,
       matchedBy: row.matched_by,
       score: row.score ?? 0,
-      totalQuantity: summary?.total_quantity ?? 0,
-      palletCount: summary?.pallet_count ?? 0,
-      earliestProductionDate: summary?.earliest_production_date ?? null,
-      latestProductionDate: summary?.latest_production_date ?? null,
+      totalQuantity: Number(row.total_quantity ?? 0),
+      palletCount: Number(row.location_count ?? 0),
+      locationCount: Number(row.location_count ?? 0),
+      openStockQuantity: Number(row.open_quantity ?? 0),
+      oldestDateCode: row.oldest_date_code ?? null,
+      earliestProductionDate: row.earliest_production_date ?? null,
+      latestProductionDate: row.latest_production_date ?? null,
     };
   });
 }
@@ -117,7 +135,7 @@ export async function getMaterialDistribution(materialCode: string) {
   const db = requireSupabase();
   const { data, error } = await db
     .from("v_current_inventory_batches")
-    .select("batch_id, location_code, location_type, quantity, production_date, lot_no, box_barcode")
+    .select("batch_id, location_code, location_type, quantity, production_date, date_code, stock_form, received_at, lot_no, box_barcode")
     .eq("material_code", materialCode)
     .order("production_date", { ascending: true })
     .order("created_at", { ascending: true });
@@ -133,6 +151,9 @@ export async function getMaterialDistribution(materialCode: string) {
     locationType: row.location_type ?? null,
     quantity: Number(row.quantity ?? 0),
     productionDate: row.production_date,
+    dateCode: row.date_code ?? null,
+    stockForm: row.stock_form ?? null,
+    receivedAt: row.received_at ?? null,
     lotNo: row.lot_no ?? null,
     boxBarcode: row.box_barcode ?? null,
   }));

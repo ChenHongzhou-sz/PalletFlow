@@ -1,5 +1,16 @@
 import { parseCsv } from "@/lib/csv/parseCsv";
 import { getMissingImportFields, resolveImportColumns } from "@/lib/import/import-schema";
+import {
+  mergeSearchAliases,
+  parseCapacitanceToUf,
+  parseDimensionValue,
+  parseLifetimeHours,
+  parseMaterialSpecification,
+  parseOptionalNumber,
+  parseSeriesValue,
+  parseTemperatureC,
+  parseVoltageValue,
+} from "@/lib/materials/material-spec";
 import type { BarcodeAliasImportRow, ImportIssue, ImportPreviewResult, MaterialImportRow } from "@/types/import";
 
 function isBlankRow(row: string[]) {
@@ -37,6 +48,10 @@ function buildDuplicateIssues(
   }
 
   return { duplicateKeys, issues };
+}
+
+function parseSearchAliases(value: string) {
+  return mergeSearchAliases(value.split(/[|,\n]/u).map((item) => item.trim()));
 }
 
 export function validateMaterialsCsv(text: string): ImportPreviewResult<MaterialImportRow> {
@@ -106,14 +121,50 @@ export function validateMaterialsMatrix(matrix: string[][]): ImportPreviewResult
       continue;
     }
 
+    const specificationRaw = read("specification_raw") || read("specification");
+    const parsedSpec = parseMaterialSpecification(specificationRaw);
+    const parsedDimension = parseDimensionValue(read("diameter_mm"));
+    const voltageV = parseVoltageValue(read("voltage_v")) ?? parsedSpec.voltageV;
+    const capacitanceValue = parseCapacitanceToUf(read("capacitance_value")) ?? parsedSpec.capacitanceValue;
+    const heightMm = parseOptionalNumber(read("height_mm")) ?? parsedDimension.heightMm ?? parsedSpec.heightMm;
+    const series = read("series") || parsedSpec.series || parseSeriesValue(specificationRaw) || undefined;
+    const searchAliases = mergeSearchAliases(
+      parseSearchAliases(read("search_aliases")),
+      parsedSpec.searchAliases,
+      parsedDimension.searchAliases,
+      read("alias_value"),
+      series,
+    );
+
     rows.push({
       rowNumber,
       material_code: materialCode,
       short_code: read("short_code") || undefined,
       description: read("description") || undefined,
       category: read("category") || undefined,
-      specification: read("specification") || undefined,
+      specification: read("specification") || specificationRaw || undefined,
+      specification_raw: specificationRaw || undefined,
       image_url: read("image_url") || undefined,
+      brand: read("brand") || undefined,
+      series,
+      manufacturer_part_no: read("manufacturer_part_no") || undefined,
+      internal_part_no: read("internal_part_no") || undefined,
+      voltage_v: voltageV,
+      capacitance_value: capacitanceValue,
+      capacitance_unit: capacitanceValue !== undefined ? "uF" : read("capacitance_unit") || undefined,
+      diameter_mm: parseOptionalNumber(read("diameter_mm")) ?? parsedDimension.diameterMm ?? parsedSpec.diameterMm,
+      height_mm: heightMm,
+      lifetime_h: parseLifetimeHours(read("lifetime_h")) ?? parsedSpec.lifetimeH,
+      temperature_c: parseTemperatureC(read("temperature_c")) ?? parsedSpec.temperatureC,
+      standard_box_qty: parseOptionalNumber(read("standard_box_qty")),
+      moq: parseOptionalNumber(read("moq")),
+      mpq: parseOptionalNumber(read("mpq")),
+      search_aliases: searchAliases.length ? searchAliases : undefined,
+      alias_type: read("alias_type") || undefined,
+      alias_value: read("alias_value") || undefined,
+      customer_name: read("customer_name") || undefined,
+      supplier_name: read("supplier_name") || undefined,
+      remark: read("remark") || undefined,
     });
   }
 

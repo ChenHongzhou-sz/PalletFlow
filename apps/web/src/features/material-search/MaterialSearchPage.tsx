@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ConfigNotice } from "@/components/feedback/ConfigNotice";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { StatCard } from "@/components/feedback/StatCard";
@@ -6,22 +6,95 @@ import { SearchField } from "@/components/forms/SearchField";
 import { PageHeader } from "@/components/mobile/PageHeader";
 import { ScanActionButton } from "@/components/scanner/ScanActionButton";
 import { resolveErrorMessage } from "@/lib/api/errors";
-import { formatProductionMonth, formatDateTime } from "@/lib/formatters/date";
+import { formatDateTime, formatProductionMonth } from "@/lib/formatters/date";
 import { formatLocationType } from "@/lib/formatters/location";
 import { formatQuantity } from "@/lib/formatters/number";
+import { buildMaterialSpecChips } from "@/lib/materials/material-spec";
+import {
+  readRecentMaterialSearches,
+  readRecentMaterialViews,
+  saveRecentMaterialSearch,
+  saveRecentMaterialView,
+  type RecentMaterialView,
+} from "@/lib/materials/recent-materials";
 import { getMaterialDistribution, searchMaterials } from "@/services/search/search-service";
 import type { MaterialDistributionRow, MaterialSearchItem } from "@/types/domain";
+
+type StockFilter = "all" | "in_stock" | "open_stock";
+
+const stockFilterOptions: Array<{ value: StockFilter; label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "in_stock", label: "有库存" },
+  { value: "open_stock", label: "有散料" },
+];
+
+const matchedByLabels: Record<string, string> = {
+  barcode: "条码",
+  material_code_exact: "精确料号",
+  material_alias_exact: "客户料号",
+  short_code_exact: "简称",
+  manufacturer_part_no_exact: "厂商料号",
+  internal_part_no_exact: "内部料号",
+  material_code_prefix: "料号前缀",
+  material_alias_prefix: "别名前缀",
+  structured: "规格组合",
+  contains: "模糊包含",
+  fuzzy: "模糊相似",
+};
+
+function formatMatchedByLabel(value: string) {
+  return matchedByLabels[value] ?? value.replace(/_/gu, " ");
+}
+
+function formatStockForm(value: string | null | undefined) {
+  if (value === "OPEN") {
+    return "散料";
+  }
+
+  if (value === "SEALED") {
+    return "整箱";
+  }
+
+  return value ?? "--";
+}
+
+function formatPackValue(value: number | null | undefined) {
+  return value === null || value === undefined ? "--" : `${formatQuantity(value)} PCS`;
+}
+
+function buildRecentViewLabel(item: MaterialSearchItem) {
+  const head = item.shortCode || item.materialCode;
+  return item.series ? `${head} / ${item.series}` : head;
+}
+
+function buildSpecChips(item: MaterialSearchItem) {
+  return buildMaterialSpecChips({
+    voltageV: item.voltageV,
+    capacitanceValue: item.capacitanceValue,
+    diameterMm: item.diameterMm,
+    heightMm: item.heightMm,
+    series: item.series,
+    lifetimeH: item.lifetimeH,
+    temperatureC: item.temperatureC,
+  });
+}
 
 export function MaterialSearchPage() {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim());
+  const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [recentViews, setRecentViews] = useState<RecentMaterialView[]>([]);
   const [results, setResults] = useState<MaterialSearchItem[]>([]);
   const [selectedMaterialCode, setSelectedMaterialCode] = useState<string | null>(null);
   const [distribution, setDistribution] = useState<MaterialDistributionRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selected = results.find((item) => item.materialCode === selectedMaterialCode) ?? null;
+  useEffect(() => {
+    setRecentSearches(readRecentMaterialSearches());
+    setRecentViews(readRecentMaterialViews());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,13 +117,14 @@ export function MaterialSearchPage() {
         }
 
         setResults(items);
-        setSelectedMaterialCode((current) => current && items.some((item) => item.materialCode === current) ? current : (items[0]?.materialCode ?? null));
+        setRecentSearches(saveRecentMaterialSearch(deferredQuery));
       })
       .catch((reason) => {
         if (!cancelled) {
           setError(resolveErrorMessage(reason));
           setResults([]);
           setSelectedMaterialCode(null);
+          setDistribution([]);
         }
       })
       .finally(() => {
@@ -64,6 +138,38 @@ export function MaterialSearchPage() {
     };
   }, [deferredQuery]);
 
+  const filteredResults = useMemo(() => {
+    return results.filter((item) => {
+      if (stockFilter === "in_stock") {
+        return item.totalQuantity > 0;
+      }
+
+      if (stockFilter === "open_stock") {
+        return item.openStockQuantity > 0;
+      }
+
+      return true;
+    });
+  }, [results, stockFilter]);
+
+  useEffect(() => {
+    if (!filteredResults.length) {
+      setSelectedMaterialCode(null);
+      return;
+    }
+
+    setSelectedMaterialCode((current) => {
+      if (current && filteredResults.some((item) => item.materialCode === current)) {
+        return current;
+      }
+
+      return filteredResults[0]?.materialCode ?? null;
+    });
+  }, [filteredResults]);
+
+  const selected = filteredResults.find((item) => item.materialCode === selectedMaterialCode) ?? null;
+  const selectedChips = selected ? buildSpecChips(selected) : [];
+
   useEffect(() => {
     let cancelled = false;
 
@@ -71,6 +177,13 @@ export function MaterialSearchPage() {
       setDistribution([]);
       return;
     }
+
+    setRecentViews(
+      saveRecentMaterialView({
+        materialCode: selected.materialCode,
+        label: buildRecentViewLabel(selected),
+      }),
+    );
 
     getMaterialDistribution(selected.materialCode)
       .then((rows) => {
@@ -92,14 +205,18 @@ export function MaterialSearchPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="Search Material" title="查物料" description="支持完整料号、简称、描述和条码入口。先找到物料，再看它分布在哪些库位。" />
+      <PageHeader
+        eyebrow="Search Material"
+        title="查物料"
+        description="支持料号、客户料号、系列、电压、容量、尺寸、描述和条码入口。先找到物料，再看库存分布、散料和最老 Date Code。"
+      />
       <ConfigNotice />
 
       <section className="pf-panel space-y-4 p-5">
         <SearchField
-          label="输入料号 / 简称 / 描述"
+          label="输入料号 / 电压 / 容量 / 尺寸 / 系列 / 描述"
           value={query}
-          placeholder="例如 100UF、SZ121、SZ1005G121TF"
+          placeholder="例如 450 470 35x50 / 450V 470uF / EP / 德方料号"
           onChange={setQuery}
           action={
             <ScanActionButton
@@ -110,7 +227,33 @@ export function MaterialSearchPage() {
             />
           }
         />
-        <p className="text-xs leading-6 text-slate-500">搜索结果默认优先显示精确料号、简称和条码命中，再显示模糊搜索。</p>
+        <p className="text-xs leading-6 text-slate-500">搜索结果会优先显示条码、精确料号、客户料号和规格组合命中的物料。</p>
+
+        {recentSearches.length ? (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">最近搜索</p>
+            <div className="flex flex-wrap gap-2">
+              {recentSearches.map((item) => (
+                <button key={item} type="button" onClick={() => setQuery(item)} className="pf-pill bg-slate-100 text-slate-600">
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {recentViews.length ? (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">最近查看</p>
+            <div className="flex flex-wrap gap-2">
+              {recentViews.map((item) => (
+                <button key={item.materialCode} type="button" onClick={() => setQuery(item.materialCode)} className="pf-pill bg-white text-slate-600">
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {error ? <div className="pf-panel border-red-200 bg-red-50/90 p-4 text-sm text-red-800">{error}</div> : null}
@@ -118,15 +261,40 @@ export function MaterialSearchPage() {
       <div className="grid gap-5 xl:grid-cols-[1fr_1.25fr]">
         <section className="space-y-3">
           {deferredQuery.length < 2 ? (
-            <EmptyState title="先输入至少 2 个字符" description="例如输入 100UF、35V、磁珠、SZ121，系统就会开始检索。" />
-          ) : null}
-          {loading ? <div className="pf-panel p-5 text-sm text-slate-500">正在搜索物料...</div> : null}
-          {!loading && deferredQuery.length >= 2 && results.length === 0 ? (
-            <EmptyState title="未找到对应物料" description="可以换完整料号、简称或条码再试，后续也可以直接通过 Excel 导入新物料主数据。" />
+            <EmptyState title="先输入至少 2 个字符" description="例如输入 450、470uF、35x50、EP、完整料号或客户料号，系统就会开始检索。" />
           ) : null}
 
-          {results.map((item) => {
+          {loading ? <div className="pf-panel p-5 text-sm text-slate-500">正在搜索物料...</div> : null}
+
+          {!loading && deferredQuery.length >= 2 && results.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {stockFilterOptions.map((option) => {
+                const active = stockFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setStockFilter(option.value)}
+                    className={`pf-pill ${active ? "bg-ink text-white" : "bg-slate-100 text-slate-600"}`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {!loading && deferredQuery.length >= 2 && results.length === 0 ? (
+            <EmptyState title="未找到对应物料" description="可以换完整料号、客户料号、系列、电压容量组合或尺寸再试，后续也可以继续通过 Excel 导入新主数据。" />
+          ) : null}
+
+          {!loading && deferredQuery.length >= 2 && results.length > 0 && filteredResults.length === 0 ? (
+            <EmptyState title="当前筛选条件下没有结果" description="搜索结果里有物料，但当前过滤器只显示有库存或有散料的项目。可以切回“全部”查看。" />
+          ) : null}
+
+          {filteredResults.map((item) => {
             const isActive = item.materialCode === selectedMaterialCode;
+            const specChips = buildSpecChips(item);
 
             return (
               <button
@@ -136,12 +304,31 @@ export function MaterialSearchPage() {
                 className={`pf-panel w-full p-5 text-left transition ${isActive ? "border-ember bg-white" : "hover:-translate-y-0.5"}`}
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-display text-2xl font-semibold text-ink">{item.shortCode || item.materialCode}</p>
                     <p className="mt-1 text-sm font-medium text-slate-600">{item.materialCode}</p>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">{item.description || "未填写描述"}</p>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">{item.description || item.specificationRaw || "暂无描述"}</p>
                   </div>
-                  <span className="pf-pill bg-slate-100 text-slate-600">{item.matchedBy}</span>
+                  <span className="pf-pill bg-slate-100 text-slate-600">{formatMatchedByLabel(item.matchedBy)}</span>
+                </div>
+
+                {specChips.length ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {specChips.map((chip) => (
+                      <span key={chip} className="pf-pill bg-white text-slate-600">
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
+                  <span className="pf-pill bg-slate-100 text-slate-600">库存 {formatQuantity(item.totalQuantity)} PCS</span>
+                  <span className="pf-pill bg-slate-100 text-slate-600">库位 {item.locationCount}</span>
+                  {item.openStockQuantity > 0 ? (
+                    <span className="pf-pill bg-amber-100 text-amber-800">散料 {formatQuantity(item.openStockQuantity)} PCS</span>
+                  ) : null}
+                  {item.oldestDateCode ? <span className="pf-pill bg-slate-100 text-slate-600">最老 DC {item.oldestDateCode}</span> : null}
                 </div>
               </button>
             );
@@ -155,41 +342,90 @@ export function MaterialSearchPage() {
                 <p className="text-sm font-semibold text-slate-500">当前物料</p>
                 <h2 className="mt-2 font-display text-3xl font-semibold text-ink">{selected.shortCode || selected.materialCode}</h2>
                 <p className="mt-1 text-sm font-medium text-slate-600">{selected.materialCode}</p>
-                <p className="mt-4 text-sm leading-7 text-slate-600">{selected.description || "暂无描述"}</p>
+                <p className="mt-4 text-sm leading-7 text-slate-600">{selected.description || selected.specificationRaw || "暂无描述"}</p>
+
+                {selectedChips.length ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {selectedChips.map((chip) => (
+                      <span key={chip} className="pf-pill bg-slate-100 text-slate-600">
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <StatCard label="总库存" value={`${formatQuantity(selected.totalQuantity)} PCS`} tone="dark" />
-                  <StatCard label="库位数" value={String(selected.palletCount)} />
-                  <StatCard label="最早生产" value={formatProductionMonth(selected.earliestProductionDate)} />
-                  <StatCard label="最新生产" value={formatProductionMonth(selected.latestProductionDate)} tone="accent" />
+                  <StatCard label="库位数" value={String(selected.locationCount)} />
+                  <StatCard label="散料库存" value={`${formatQuantity(selected.openStockQuantity)} PCS`} />
+                  <StatCard label="最老 DC" value={selected.oldestDateCode || "--"} tone="accent" />
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  {[
+                    { label: "品牌", value: selected.brand || "--" },
+                    { label: "系列", value: selected.series || "--" },
+                    { label: "厂商料号", value: selected.manufacturerPartNo || "--" },
+                    { label: "内部料号", value: selected.internalPartNo || "--" },
+                    { label: "标准箱数", value: formatPackValue(selected.standardBoxQty) },
+                    { label: "MOQ", value: formatPackValue(selected.moq) },
+                    { label: "MPQ", value: formatPackValue(selected.mpq) },
+                    { label: "生产月份", value: `${formatProductionMonth(selected.earliestProductionDate)} -> ${formatProductionMonth(selected.latestProductionDate)}` },
+                  ].map((field) => (
+                    <div key={field.label} className="rounded-[1.4rem] bg-slate-100/90 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{field.label}</p>
+                      <p className="mt-2 text-sm font-medium text-ink">{field.value}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               <div className="pf-panel p-5">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-display text-xl font-semibold text-ink">库存分布</h3>
-                  <span className="text-xs text-slate-500">按生产年月升序</span>
+                  <div>
+                    <h3 className="font-display text-xl font-semibold text-ink">库存分布</h3>
+                    <p className="mt-1 text-xs text-slate-500">按生产日期升序，方便现场先看 FIFO 再定位散料。</p>
+                  </div>
+                  <span className="text-xs text-slate-500">{distribution.length} 条明细</span>
                 </div>
-                <div className="mt-4 space-y-3">
-                  {distribution.map((row) => (
-                    <div key={row.batchId} className="rounded-[1.6rem] bg-slate-100/90 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-display text-xl font-semibold text-ink">{row.locationCode}</p>
-                          <p className="mt-1 text-sm text-slate-600">
-                            {row.locationType ? `${formatLocationType(row.locationType)} · ` : ""}生产年月 {formatProductionMonth(row.productionDate)} {row.lotNo ? `· 批次 ${row.lotNo}` : ""}
-                          </p>
-                          {row.boxBarcode ? <p className="mt-1 text-xs text-slate-500">外箱条码 {row.boxBarcode}</p> : null}
+
+                {distribution.length ? (
+                  <div className="mt-4 space-y-3">
+                    {distribution.map((row) => (
+                      <div key={row.batchId} className="rounded-[1.6rem] bg-slate-100/90 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-display text-xl font-semibold text-ink">{row.locationCode}</p>
+                              <span className={`pf-pill ${row.stockForm === "OPEN" ? "bg-amber-100 text-amber-800" : "bg-white text-slate-600"}`}>
+                                {formatStockForm(row.stockForm)}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {row.locationType ? `${formatLocationType(row.locationType)} / ` : ""}
+                              生产月 {formatProductionMonth(row.productionDate)}
+                              {row.dateCode ? ` / DC ${row.dateCode}` : ""}
+                              {row.lotNo ? ` / 批次 ${row.lotNo}` : ""}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                              {row.boxBarcode ? <span>外箱条码 {row.boxBarcode}</span> : null}
+                              {row.receivedAt ? <span>入库 {formatDateTime(row.receivedAt)}</span> : null}
+                            </div>
+                          </div>
+                          <span className="rounded-full bg-white px-3 py-2 text-sm font-semibold text-ink">{formatQuantity(row.quantity)} PCS</span>
                         </div>
-                        <span className="rounded-full bg-white px-3 py-2 text-sm font-semibold text-ink">{formatQuantity(row.quantity)} PCS</span>
                       </div>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-4 text-xs text-slate-500">明细更新时间跟随正式数据库写入。缓存清空不会删除这些原始库位库存数据。</p>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4">
+                    <EmptyState title="当前没有可展示的库存" description="这个物料已经在主数据里，但目前没有有效库存批次，后续入库后会自动显示在这里。" />
+                  </div>
+                )}
               </div>
             </>
           ) : (
-            <EmptyState title="搜索结果会显示在这里" description="选中某个物料后，就会看到总库存、库位数和按 FIFO 排序的分布明细。" />
+            <EmptyState title="搜索结果会显示在这里" description="选中某个物料后，就会看到总库存、库位数、散料数量和按 FIFO 排序的分布明细。" />
           )}
         </section>
       </div>

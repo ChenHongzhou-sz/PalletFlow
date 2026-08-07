@@ -7,7 +7,28 @@ export interface MaterialImportRow {
   description?: string;
   category?: string;
   specification?: string;
+  specification_raw?: string;
   image_url?: string;
+  brand?: string;
+  series?: string;
+  manufacturer_part_no?: string;
+  internal_part_no?: string;
+  voltage_v?: number;
+  capacitance_value?: number;
+  capacitance_unit?: string;
+  diameter_mm?: number;
+  height_mm?: number;
+  lifetime_h?: number;
+  temperature_c?: number;
+  standard_box_qty?: number;
+  moq?: number;
+  mpq?: number;
+  search_aliases?: string[];
+  alias_type?: string;
+  alias_value?: string;
+  customer_name?: string;
+  supplier_name?: string;
+  remark?: string;
 }
 
 export interface BarcodeAliasImportRow {

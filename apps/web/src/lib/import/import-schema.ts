@@ -6,7 +6,28 @@ type MaterialImportField =
   | "description"
   | "category"
   | "specification"
-  | "image_url";
+  | "specification_raw"
+  | "image_url"
+  | "brand"
+  | "series"
+  | "manufacturer_part_no"
+  | "internal_part_no"
+  | "voltage_v"
+  | "capacitance_value"
+  | "capacitance_unit"
+  | "diameter_mm"
+  | "height_mm"
+  | "lifetime_h"
+  | "temperature_c"
+  | "standard_box_qty"
+  | "moq"
+  | "mpq"
+  | "search_aliases"
+  | "alias_type"
+  | "alias_value"
+  | "customer_name"
+  | "supplier_name"
+  | "remark";
 
 type BarcodeAliasImportField = "barcode" | "material_code" | "remark";
 
@@ -24,12 +45,33 @@ const preferredSheetNames: Record<ImportMode, string[]> = {
 
 const fieldAliases: Record<ImportMode, Record<string, string[]>> = {
   materials: {
-    material_code: ["material_code", "materialcode", "料号", "完整料号", "物料型号", "型号", "pn", "partnumber"],
+    material_code: ["material_code", "materialcode", "料号", "完整料号", "物料型号", "型号", "物料编号", "代码", "pn", "partnumber"],
     short_code: ["short_code", "shortcode", "short code", "简称", "物料代码", "物料编码", "内部代码"],
-    description: ["description", "desc", "描述", "物料描述"],
-    category: ["category", "分类"],
+    description: ["description", "desc", "描述", "物料描述", "全名", "物料名称"],
+    category: ["category", "分类", "名称"],
     specification: ["specification", "spec", "规格"],
+    specification_raw: ["specification_raw", "specification raw", "规格型号", "规格描述", "原始规格"],
     image_url: ["image_url", "imageurl", "image url", "图片", "图片链接", "物料图片"],
+    brand: ["brand", "品牌"],
+    series: ["series", "系列"],
+    manufacturer_part_no: ["manufacturer_part_no", "manufacturerpartno", "manufacturer pn", "厂商料号", "制造商料号"],
+    internal_part_no: ["internal_part_no", "internalpartno", "internal pn", "内部料号"],
+    voltage_v: ["voltage_v", "voltage", "电压", "电压(v)"],
+    capacitance_value: ["capacitance_value", "capacitance", "容值", "电容量"],
+    capacitance_unit: ["capacitance_unit", "容值单位", "电容量单位"],
+    diameter_mm: ["diameter_mm", "diameter", "直径", "直径(mm）", "直径(mm)"],
+    height_mm: ["height_mm", "height", "高度", "高度(mm）", "高度(mm)"],
+    lifetime_h: ["lifetime_h", "lifetime", "寿命", "寿命(h)"],
+    temperature_c: ["temperature_c", "temperature", "温度", "温度(℃)", "温度(c)"],
+    standard_box_qty: ["standard_box_qty", "box_qty", "每箱数量", "标准箱数"],
+    moq: ["moq"],
+    mpq: ["mpq"],
+    search_aliases: ["search_aliases", "searchaliases", "搜索别名", "搜索关键词"],
+    alias_type: ["alias_type", "aliastype", "别名类型"],
+    alias_value: ["alias_value", "aliasvalue", "别名", "德方对应料号", "客户料号", "供应商料号"],
+    customer_name: ["customer_name", "customername", "客户名称"],
+    supplier_name: ["supplier_name", "suppliername", "供应商名称"],
+    remark: ["remark", "remarks", "备注"],
   },
   barcode_aliases: {
     barcode: ["barcode", "条码", "箱条码", "外箱条码"],

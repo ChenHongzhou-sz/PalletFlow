@@ -1,4 +1,5 @@
 import { getPreferredImportSheetNames, hasRequiredImportColumns, normalizeImportToken } from "@/lib/import/import-schema";
+import { buildWanyuMaterialsMatrix } from "@/lib/materials/wanyu-workbook";
 import type { ImportMode } from "@/types/import";
 
 function normalizeCell(value: unknown) {
@@ -29,6 +30,14 @@ export async function readImportWorkbook(file: File, mode: ImportMode) {
   });
 
   const preferredSheetNames = getPreferredImportSheetNames(mode).map(normalizeImportToken);
+  const materialSheet = workbook.SheetNames.find((sheetName) => normalizeImportToken(sheetName) === normalizeImportToken("物料"));
+  const sheet1 = workbook.SheetNames.find((sheetName) => normalizeImportToken(sheetName) === normalizeImportToken("sheet1"));
+
+  if (mode === "materials" && materialSheet && sheet1) {
+    const materialsMatrix = readSheetMatrix(workbookPackage, workbook.Sheets[materialSheet]!);
+    const enrichmentMatrix = readSheetMatrix(workbookPackage, workbook.Sheets[sheet1]!);
+    return buildWanyuMaterialsMatrix(materialsMatrix, enrichmentMatrix);
+  }
 
   const exactMatch = workbook.SheetNames.find((sheetName) => {
     if (!preferredSheetNames.includes(normalizeImportToken(sheetName))) {

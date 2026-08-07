@@ -5,10 +5,28 @@ export interface MaterialSearchItem {
   description: string | null;
   category: string | null;
   specification: string | null;
+  specificationRaw: string | null;
+  brand: string | null;
+  series: string | null;
+  manufacturerPartNo: string | null;
+  internalPartNo: string | null;
+  voltageV: number | null;
+  capacitanceValue: number | null;
+  capacitanceUnit: string | null;
+  diameterMm: number | null;
+  heightMm: number | null;
+  lifetimeH: number | null;
+  temperatureC: number | null;
+  standardBoxQty: number | null;
+  moq: number | null;
+  mpq: number | null;
   matchedBy: string;
   score: number;
   totalQuantity: number;
   palletCount: number;
+  locationCount: number;
+  openStockQuantity: number;
+  oldestDateCode: string | null;
   earliestProductionDate: string | null;
   latestProductionDate: string | null;
 }
@@ -20,6 +38,9 @@ export interface MaterialDistributionRow {
   locationType: string | null;
   quantity: number;
   productionDate: string;
+  dateCode: string | null;
+  stockForm: string | null;
+  receivedAt: string | null;
   lotNo: string | null;
   boxBarcode: string | null;
 }
