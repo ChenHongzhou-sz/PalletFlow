@@ -222,7 +222,7 @@ export function MasterDataImportPage() {
             <a className="ml-4 font-semibold text-ink underline" href={`${import.meta.env.BASE_URL}templates/barcode-aliases-import-template.csv`} download>
               条码 CSV 模板
             </a>
-            <a className="ml-4 font-semibold text-ink underline" href={`${import.meta.env.BASE_URL}templates/PalletFlow-master-data-import-template.xlsx`} download>
+            <a className="ml-4 font-semibold text-ink underline" href={`${import.meta.env.BASE_URL}templates/PalletFlow-master-data-import-template-v2.xlsx`} download>
               Excel 模板
             </a>
           </p>

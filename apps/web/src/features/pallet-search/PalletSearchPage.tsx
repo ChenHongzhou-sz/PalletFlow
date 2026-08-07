@@ -73,6 +73,10 @@ export function PalletSearchPage() {
 
   const totalQuantity = filteredRows.reduce((sum, row) => sum + row.quantity, 0);
 
+  function isMissingLocationError(value: string) {
+    return /location\s+.+\s+does not exist\./i.test(value);
+  }
+
   async function handleClearPallet() {
     if (!deferredPalletCode || !rows.length) {
       return;
@@ -97,7 +101,15 @@ export function PalletSearchPage() {
       setRows([]);
       setMessage(`库位 ${deferredPalletCode} 已清空，历史日志已保留。`);
     } catch (reason) {
-      setError(resolveErrorMessage(reason));
+      const nextError = resolveErrorMessage(reason);
+
+      if (isMissingLocationError(nextError)) {
+        setRows([]);
+        setError(`库位 ${deferredPalletCode} 在当前数据库里不存在。当前页面显示的库存很可能来自旧缓存，请刷新页面后再重试。`);
+        return;
+      }
+
+      setError(nextError);
     } finally {
       setSubmitting(false);
     }
