@@ -30,6 +30,12 @@ type CycleCountResultRow = {
   variance_quantity: number;
 };
 
+type CycleCountRpcItem = {
+  batch_id: string;
+  counted_quantity: number;
+  note?: string;
+};
+
 export interface CreateInboundInput {
   palletCode: string;
   materialCode: string;
@@ -120,10 +126,16 @@ export async function clearPalletInventory(palletCode: string, operatorName?: st
 
 export async function completeCycleCount(palletCode: string, items: CycleCountInputRow[], operatorName?: string) {
   const db = requireSupabase();
+  const payload: CycleCountRpcItem[] = items.map((item) => ({
+    batch_id: item.batchId,
+    counted_quantity: item.countedQuantity,
+    note: item.note,
+  }));
+
   const { data, error } = await db.rpc("complete_cycle_count", {
     p_warehouse_code: "MAIN",
     p_pallet_code: palletCode.trim().toUpperCase(),
-    p_items: items,
+    p_items: payload,
     p_operator_name: operatorName || null,
     p_note: null,
   });
@@ -134,4 +146,3 @@ export async function completeCycleCount(palletCode: string, items: CycleCountIn
 
   return (data ?? []) as CycleCountResultRow[];
 }
-
