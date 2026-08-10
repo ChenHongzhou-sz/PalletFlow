@@ -45,6 +45,8 @@ type CurrentInventoryBatchRow = {
   production_date: string;
   lot_no: string | null;
   box_barcode: string | null;
+  date_code: string | null;
+  stock_form: string | null;
 };
 
 type PalletLookupViewRow = {
@@ -193,7 +195,7 @@ export async function getPalletInventory(palletCode: string) {
 
   const { data, error } = await db
     .from("v_current_inventory_batches")
-    .select("batch_id, location_code, location_name, location_type, material_code, short_code, description, quantity, production_date, lot_no, box_barcode")
+    .select("batch_id, location_code, location_name, location_type, material_code, short_code, description, quantity, production_date, lot_no, box_barcode, date_code, stock_form")
     .eq("location_code", normalized)
     .order("production_date", { ascending: true })
     .order("material_code", { ascending: true });
@@ -215,6 +217,8 @@ export async function getPalletInventory(palletCode: string) {
     productionDate: row.production_date,
     lotNo: row.lot_no,
     boxBarcode: row.box_barcode,
+    dateCode: row.date_code ?? null,
+    stockForm: row.stock_form ?? null,
   }));
 }
 

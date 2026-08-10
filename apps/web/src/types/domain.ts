@@ -58,6 +58,8 @@ export interface PalletInventoryRow {
   productionDate: string;
   lotNo: string | null;
   boxBarcode: string | null;
+  dateCode: string | null;
+  stockForm: string | null;
 }
 
 export interface CurrentInventoryExportRow {

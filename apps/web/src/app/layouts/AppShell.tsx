@@ -5,6 +5,7 @@ const dockLinks = [
   { to: appRoutes.home, label: "首页" },
   { to: appRoutes.materialSearch, label: "查物料" },
   { to: appRoutes.palletSearch, label: "查库位" },
+  { to: appRoutes.transfer, label: "移库" },
   { to: appRoutes.operationLogs, label: "日志" },
 ];
 
@@ -54,7 +55,7 @@ export function AppShell() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 border-t border-white/60 bg-white/[0.88] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur">
-        <div className="mx-auto grid max-w-3xl grid-cols-4 gap-2">
+        <div className="mx-auto grid max-w-4xl grid-cols-5 gap-2">
           {dockLinks.map((link) => (
             <NavLink
               key={link.to}

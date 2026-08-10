@@ -46,7 +46,7 @@ export function OperationLogPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="Operation Logs" title="操作记录" description="查看入库、出库、盘点、清空库位的历史记录，支持按日期、库位和物料过滤。" />
+      <PageHeader eyebrow="Operation Logs" title="操作记录" description="查看入库、出库、移库、盘点和清空库位的历史记录，支持按日期、库位和物料过滤。" />
       <ConfigNotice />
 
       <section className="pf-panel grid gap-4 p-5 lg:grid-cols-4">

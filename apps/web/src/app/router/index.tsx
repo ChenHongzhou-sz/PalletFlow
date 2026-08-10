@@ -9,6 +9,7 @@ import { MaterialSearchPage } from "@/features/material-search/MaterialSearchPag
 import { OperationLogPage } from "@/features/operation-log/OperationLogPage";
 import { OutboundPage } from "@/features/outbound/OutboundPage";
 import { PalletSearchPage } from "@/features/pallet-search/PalletSearchPage";
+import { TransferPage } from "@/features/transfer/TransferPage";
 import { appRoutes } from "@/lib/constants/routes";
 
 export const router = createHashRouter([
@@ -35,6 +36,10 @@ export const router = createHashRouter([
       {
         path: "outbound",
         element: <OutboundPage />,
+      },
+      {
+        path: "transfer",
+        element: <TransferPage />,
       },
       {
         path: "counts",

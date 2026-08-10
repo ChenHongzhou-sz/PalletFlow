@@ -36,6 +36,27 @@ type CycleCountRpcItem = {
   note?: string;
 };
 
+type LocationTransferRpcRow = {
+  operation_id: string;
+  batch_id: string;
+  material_code: string;
+  moved_quantity: number;
+  source_location_code: string;
+  target_location_code: string;
+};
+
+type BatchTransferRpcRow = {
+  operation_id: string;
+  source_batch_id: string;
+  target_batch_id: string;
+  material_code: string;
+  moved_quantity: number;
+  source_location_code: string;
+  target_location_code: string;
+  source_remaining_quantity: number;
+  target_quantity: number;
+};
+
 export interface CreateInboundInput {
   palletCode: string;
   materialCode: string;
@@ -44,6 +65,36 @@ export interface CreateInboundInput {
   lotNo?: string;
   boxBarcode?: string;
   operatorName?: string;
+}
+
+export interface LocationTransferSummary {
+  operationId: string;
+  batchId: string;
+  materialCode: string;
+  movedQuantity: number;
+  sourceLocationCode: string;
+  targetLocationCode: string;
+}
+
+export interface BatchTransferInput {
+  sourceLocationCode: string;
+  batchId: string;
+  targetLocationCode: string;
+  quantity: number;
+  operatorName?: string;
+  note?: string;
+}
+
+export interface BatchTransferSummary {
+  operationId: string;
+  sourceBatchId: string;
+  targetBatchId: string;
+  materialCode: string;
+  movedQuantity: number;
+  sourceLocationCode: string;
+  targetLocationCode: string;
+  sourceRemainingQuantity: number;
+  targetQuantity: number;
 }
 
 export async function createInboundBatch(input: CreateInboundInput) {
@@ -145,4 +196,59 @@ export async function completeCycleCount(palletCode: string, items: CycleCountIn
   }
 
   return (data ?? []) as CycleCountResultRow[];
+}
+
+export async function transferLocationInventory(sourceLocationCode: string, targetLocationCode: string, operatorName?: string, note?: string) {
+  const db = requireSupabase();
+  const { data, error } = await db.rpc("transfer_location_inventory", {
+    p_source_location_code: sourceLocationCode.trim().toUpperCase(),
+    p_target_location_code: targetLocationCode.trim().toUpperCase(),
+    p_warehouse_code: "MAIN",
+    p_operator_name: operatorName || null,
+    p_note: note || null,
+    p_source: "manual",
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as LocationTransferRpcRow[]).map((row) => ({
+    operationId: row.operation_id,
+    batchId: row.batch_id,
+    materialCode: row.material_code,
+    movedQuantity: Number(row.moved_quantity ?? 0),
+    sourceLocationCode: row.source_location_code,
+    targetLocationCode: row.target_location_code,
+  })) as LocationTransferSummary[];
+}
+
+export async function transferInventoryBatch(input: BatchTransferInput) {
+  const db = requireSupabase();
+  const { data, error } = await db.rpc("transfer_inventory_batch", {
+    p_source_location_code: input.sourceLocationCode.trim().toUpperCase(),
+    p_batch_id: input.batchId,
+    p_target_location_code: input.targetLocationCode.trim().toUpperCase(),
+    p_transfer_quantity: input.quantity,
+    p_warehouse_code: "MAIN",
+    p_operator_name: input.operatorName || null,
+    p_note: input.note || null,
+    p_source: "manual",
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as BatchTransferRpcRow[]).map((row) => ({
+    operationId: row.operation_id,
+    sourceBatchId: row.source_batch_id,
+    targetBatchId: row.target_batch_id,
+    materialCode: row.material_code,
+    movedQuantity: Number(row.moved_quantity ?? 0),
+    sourceLocationCode: row.source_location_code,
+    targetLocationCode: row.target_location_code,
+    sourceRemainingQuantity: Number(row.source_remaining_quantity ?? 0),
+    targetQuantity: Number(row.target_quantity ?? 0),
+  })) as BatchTransferSummary[];
 }

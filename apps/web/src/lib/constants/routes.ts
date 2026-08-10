@@ -4,6 +4,7 @@ export const appRoutes = {
   palletSearch: "/pallets",
   inbound: "/inbound",
   outbound: "/outbound",
+  transfer: "/transfer",
   cycleCount: "/counts",
   operationLogs: "/logs",
   masterDataImport: "/master-data-import",
