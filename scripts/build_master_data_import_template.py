@@ -8,10 +8,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 OUTPUT_PATHS = [
-    BASE_DIR / "templates" / "PalletFlow-master-data-import-template.xlsx",
-    BASE_DIR / "templates" / "PalletFlow-master-data-import-template-v2.xlsx",
-    BASE_DIR / "apps" / "web" / "public" / "templates" / "PalletFlow-master-data-import-template.xlsx",
-    BASE_DIR / "apps" / "web" / "public" / "templates" / "PalletFlow-master-data-import-template-v2.xlsx",
+    BASE_DIR / "templates" / "PalletFlow-master-data-import-template-v3.xlsx",
+    BASE_DIR / "apps" / "web" / "public" / "templates" / "PalletFlow-master-data-import-template-v3.xlsx",
 ]
 
 MATERIAL_HEADERS = [
@@ -45,6 +43,7 @@ MATERIAL_HEADERS = [
 ]
 
 BARCODE_HEADERS = ["barcode", "material_code", "remark"]
+PENDING_INVENTORY_HEADERS = ["material_code", "quantity"]
 
 MATERIAL_COLUMN_WIDTHS = [
     24,
@@ -77,6 +76,7 @@ MATERIAL_COLUMN_WIDTHS = [
 ]
 
 BARCODE_COLUMN_WIDTHS = [22, 24, 34]
+PENDING_INVENTORY_COLUMN_WIDTHS = [24, 16]
 
 
 def col_name(index: int) -> str:
@@ -132,6 +132,8 @@ def worksheet_xml(sheet_name: str, rows: list[list[str]], freeze_header: bool = 
         columns = cols_xml(MATERIAL_COLUMN_WIDTHS)
     elif sheet_name == "barcode_aliases":
         columns = cols_xml(BARCODE_COLUMN_WIDTHS)
+    elif sheet_name == "pending_inventory":
+        columns = cols_xml(PENDING_INVENTORY_COLUMN_WIDTHS)
     else:
         columns = cols_xml([90])
 
@@ -160,19 +162,22 @@ def build_workbook_files() -> dict[str, str]:
     created = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     instructions_rows = [
-        ["PalletFlow 主数据导入模板说明"],
+        ["PalletFlow 主数据 / 待上架库存导入模板说明"],
         ["1. materials 工作表用于物料主数据导入或更新。"],
         ["2. barcode_aliases 工作表用于条码到 material_code 的映射。"],
-        ["3. 不要修改表头，不要合并单元格，也不要插入小计行。"],
-        ["4. materials 必填列：material_code。"],
-        ["5. barcode_aliases 必填列：barcode、material_code。"],
-        ["6. 同一文件内重复的 material_code 或 barcode 会被拒绝。"],
-        ["7. 空白单元格不会清空数据库已有值，只会跳过该字段。"],
-        ["8. barcode 请按文本处理，保留前导零。"],
-        ["9. search_aliases 用 | 分隔多个搜索别名，例如：100v|330uf|12.5x25|gt。"],
-        ["10. capacitance_value 支持直接写 330uF / 5F；voltage_v 支持写 100V。"],
-        ["11. 如果有客户料号，可在 materials 里填写 alias_type、alias_value、customer_name。"],
-        ["12. 示例行仅用于演示，正式导入前可删除。"],
+        ["3. pending_inventory 工作表用于先导入料号和数量，库存会先进入公共待分配池。"],
+        ["4. 不要修改表头，不要合并单元格，也不要插入小计行。"],
+        ["5. materials 必填列：material_code。"],
+        ["6. barcode_aliases 必填列：barcode、material_code。"],
+        ["7. pending_inventory 必填列：material_code、quantity。"],
+        ["8. 同一文件内重复的 material_code 或 barcode 会被拦截；待上架库存里的重复料号会自动汇总数量。"],
+        ["9. 空白单元格不会清空数据库已有值，只会跳过该字段。"],
+        ["10. barcode 请按文本处理，保留前导零。"],
+        ["11. search_aliases 用 | 分隔多个搜索别名，例如：100v|330uf|12.5x25|gt。"],
+        ["12. capacitance_value 支持直接写 330uF / 5F；voltage_v 支持写 100V。"],
+        ["13. 如果有客户料号，可在 materials 里填写 alias_type、alias_value、customer_name。"],
+        ["14. 待上架库存导入时先不用填生产月，后续在“入库 / 上架”页面分配库位时再补录。"],
+        ["15. 示例行仅用于演示，正式导入前可删除。"],
     ]
 
     materials_rows = [
@@ -182,8 +187,8 @@ def build_workbook_files() -> dict[str, str]:
             "GT10033012525",
             "铝电解电容 330uF 100V",
             "铝电解电容",
-            "100V/330uF,Φ12.5x25,GT系列10000H",
-            "100V/330uF,Φ12.5x25,GT系列10000H",
+            "100V/330uF,φ12.5x25,GT系列10000H",
+            "100V/330uF,φ12.5x25,GT系列10000H",
             "万裕",
             "GT",
             "",
@@ -211,8 +216,8 @@ def build_workbook_files() -> dict[str, str]:
             "DDL550033",
             "超级电容 5F 5.5V",
             "超级电容",
-            "5.5V/5F,Φ11x33,DDL系列1000H",
-            "5.5V/5F,Φ11x33,DDL系列1000H",
+            "5.5V/5F,φ11x33,DDL系列1000H",
+            "5.5V/5F,φ11x33,DDL系列1000H",
             "万裕",
             "DDL",
             "",
@@ -243,6 +248,13 @@ def build_workbook_files() -> dict[str, str]:
         ["6901234567891", "DDL505S05G3CRR", "供应商标签条码示例"],
     ]
 
+    pending_inventory_rows = [
+        PENDING_INVENTORY_HEADERS,
+        ["ERD127M2WL30RR", "1200"],
+        ["EGT476M1VD11RR", "32000"],
+        ["EGT477M1EF16RR", "12000"],
+    ]
+
     workbook_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
@@ -253,6 +265,7 @@ def build_workbook_files() -> dict[str, str]:
         '<sheet name="instructions" sheetId="1" r:id="rId1"/>'
         '<sheet name="materials" sheetId="2" r:id="rId2"/>'
         '<sheet name="barcode_aliases" sheetId="3" r:id="rId3"/>'
+        '<sheet name="pending_inventory" sheetId="4" r:id="rId4"/>'
         "</sheets>"
         "</workbook>"
     )
@@ -263,7 +276,8 @@ def build_workbook_files() -> dict[str, str]:
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
         '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>'
         '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>'
-        '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/>'
+        '<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
         "</Relationships>"
     )
 
@@ -307,6 +321,7 @@ def build_workbook_files() -> dict[str, str]:
         '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
         '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
         '<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        '<Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
         '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
         '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
         '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'
@@ -322,8 +337,8 @@ def build_workbook_files() -> dict[str, str]:
         'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
         "<dc:creator>Codex</dc:creator>"
         "<cp:lastModifiedBy>Codex</cp:lastModifiedBy>"
-        "<dc:title>PalletFlow Master Data Import Template</dc:title>"
-        "<dc:description>Material and barcode alias import template</dc:description>"
+        "<dc:title>PalletFlow Import Template</dc:title>"
+        "<dc:description>Material, barcode alias, and pending inventory import template</dc:description>"
         f'<dcterms:created xsi:type="dcterms:W3CDTF">{created}</dcterms:created>'
         f'<dcterms:modified xsi:type="dcterms:W3CDTF">{created}</dcterms:modified>'
         "</cp:coreProperties>"
@@ -336,8 +351,8 @@ def build_workbook_files() -> dict[str, str]:
         "<Application>Microsoft Excel</Application>"
         "<DocSecurity>0</DocSecurity>"
         "<ScaleCrop>false</ScaleCrop>"
-        '<HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>3</vt:i4></vt:variant></vt:vector></HeadingPairs>'
-        '<TitlesOfParts><vt:vector size="3" baseType="lpstr"><vt:lpstr>instructions</vt:lpstr><vt:lpstr>materials</vt:lpstr><vt:lpstr>barcode_aliases</vt:lpstr></vt:vector></TitlesOfParts>'
+        '<HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>4</vt:i4></vt:variant></vt:vector></HeadingPairs>'
+        '<TitlesOfParts><vt:vector size="4" baseType="lpstr"><vt:lpstr>instructions</vt:lpstr><vt:lpstr>materials</vt:lpstr><vt:lpstr>barcode_aliases</vt:lpstr><vt:lpstr>pending_inventory</vt:lpstr></vt:vector></TitlesOfParts>'
         "<Company></Company>"
         "<LinksUpToDate>false</LinksUpToDate>"
         "<SharedDoc>false</SharedDoc>"
@@ -357,6 +372,7 @@ def build_workbook_files() -> dict[str, str]:
         "xl/worksheets/sheet1.xml": worksheet_xml("instructions", instructions_rows, freeze_header=False),
         "xl/worksheets/sheet2.xml": worksheet_xml("materials", materials_rows),
         "xl/worksheets/sheet3.xml": worksheet_xml("barcode_aliases", barcode_rows),
+        "xl/worksheets/sheet4.xml": worksheet_xml("pending_inventory", pending_inventory_rows),
     }
 
 

@@ -105,9 +105,11 @@ export function MasterDataImportPage() {
     setSourceFile(file);
 
     if (file.name.toLowerCase().endsWith(".xlsx")) {
+      const workbookSheetName =
+        mode === "materials" ? "materials" : mode === "barcode_aliases" ? "barcode_aliases" : "pending_inventory";
       setSourceEncoding(null);
       setSourceText("");
-      setMessage(`已载入 Excel 文件：${file.name}。点击“预校验并生成预览”后会读取 ${mode === "materials" ? "materials" : "barcode_aliases"} 工作表。`);
+      setMessage(`已载入 Excel 文件：${file.name}。点击“预校验并生成预览”后会读取当前模式对应的 ${workbookSheetName} 工作表。`);
       return;
     }
 
@@ -250,12 +252,12 @@ export function MasterDataImportPage() {
             <a className="ml-4 font-semibold text-ink underline" href={`${import.meta.env.BASE_URL}templates/pending-inventory-import-template.csv`} download>
               待上架库存 CSV 模板
             </a>
-            <a className="ml-4 font-semibold text-ink underline" href={`${import.meta.env.BASE_URL}templates/PalletFlow-master-data-import-template-v2.xlsx`} download>
-              Excel 模板
+            <a className="ml-4 font-semibold text-ink underline" href={`${import.meta.env.BASE_URL}templates/PalletFlow-master-data-import-template-v3.xlsx`} download>
+              统一 Excel 模板
             </a>
           </p>
           <p className="mt-2">
-            现在页面已经支持两种入口：直接上传 `.xlsx` 模板，或者上传 / 粘贴 CSV。Excel 会按当前模式读取对应工作表。
+            现在页面已经支持两种入口：直接上传 `.xlsx` 总模板，或者上传 / 粘贴 CSV。Excel 会按当前模式读取对应工作表。
           </p>
           <p className="mt-2">
             如果你的 CSV 来自 Excel，系统会自动识别 `UTF-8`、`GB18030` 或 `GBK` 编码，减少中文和特殊符号乱码问题。
