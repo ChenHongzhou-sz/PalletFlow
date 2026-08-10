@@ -23,19 +23,23 @@ export function AppShell() {
             <h1 className="font-display text-2xl font-semibold text-ink">PalletFlow</h1>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-start">
-            <NavLink
-              to={appRoutes.inventoryExport}
-              className="rounded-full bg-white/[0.82] px-4 py-2 text-xs font-semibold text-ink shadow-card sm:text-sm"
-            >
-              数据导出
-            </NavLink>
-            <NavLink
-              to={appRoutes.masterDataImport}
-              className="rounded-full bg-white/[0.82] px-4 py-2 text-xs font-semibold text-ink shadow-card sm:text-sm"
-            >
-              主数据导入
-            </NavLink>
-            {!isHome ? (
+            {isHome ? (
+              <>
+                <NavLink
+                  to={appRoutes.inventoryExport}
+                  className="rounded-full bg-white/[0.82] px-4 py-2 text-xs font-semibold text-ink shadow-card sm:text-sm"
+                >
+                  数据导出
+                </NavLink>
+                <NavLink
+                  to={appRoutes.masterDataImport}
+                  className="rounded-full bg-white/[0.82] px-4 py-2 text-xs font-semibold text-ink shadow-card sm:text-sm"
+                >
+                  主数据导入
+                </NavLink>
+                <span className="hidden pf-pill bg-pine/[0.12] text-pine sm:inline-flex">真实库存存于 Supabase</span>
+              </>
+            ) : (
               <button
                 type="button"
                 onClick={() => navigate(-1)}
@@ -43,8 +47,6 @@ export function AppShell() {
               >
                 返回
               </button>
-            ) : (
-              <span className="hidden pf-pill bg-pine/[0.12] text-pine sm:inline-flex">真实库存存于 Supabase</span>
             )}
           </div>
         </header>
