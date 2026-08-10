@@ -16,6 +16,7 @@ import type { PalletInventoryRow } from "@/types/domain";
 export function PalletSearchPage() {
   const [palletCode, setPalletCode] = useState("");
   const [materialFilter, setMaterialFilter] = useState("");
+  const [selectedBatchId, setSelectedBatchId] = useState("");
   const deferredPalletCode = useDeferredValue(palletCode.trim().toUpperCase());
   const deferredMaterialFilter = useDeferredValue(materialFilter.trim().toLowerCase());
   const [rows, setRows] = useState<PalletInventoryRow[]>([]);
@@ -41,12 +42,14 @@ export function PalletSearchPage() {
       .then((items) => {
         if (!cancelled) {
           setRows(items);
+          setSelectedBatchId(items[0]?.batchId ?? "");
         }
       })
       .catch((reason) => {
         if (!cancelled) {
           setError(resolveErrorMessage(reason));
           setRows([]);
+          setSelectedBatchId("");
         }
       })
       .finally(() => {
@@ -72,6 +75,17 @@ export function PalletSearchPage() {
   });
 
   const totalQuantity = filteredRows.reduce((sum, row) => sum + row.quantity, 0);
+
+  useEffect(() => {
+    if (!filteredRows.length) {
+      setSelectedBatchId("");
+      return;
+    }
+
+    if (!filteredRows.some((row) => row.batchId === selectedBatchId)) {
+      setSelectedBatchId(filteredRows[0]?.batchId ?? "");
+    }
+  }, [filteredRows, selectedBatchId]);
 
   function isMissingLocationError(value: string) {
     return /location\s+.+\s+does not exist\./i.test(value);
@@ -117,7 +131,7 @@ export function PalletSearchPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="Search Location" title="查库位" description="直接输入库位号，先看这个库位里有哪些物料，再决定盘点、出库或清空。" />
+      <PageHeader eyebrow="Search Location" title="查库位" description="直接查这个库位现在有哪些物料，必要时再筛选或清空。" />
       <ConfigNotice />
 
       <section className="pf-panel space-y-4 p-5">
@@ -128,7 +142,14 @@ export function PalletSearchPage() {
           onChange={setPalletCode}
           helperText="下拉建议来自系统里已存在的库位号，输入越接近，候选会越少。"
         />
-        <SearchField label="库位内筛选物料" value={materialFilter} placeholder="可输入简称、料号或描述再筛一次" onChange={setMaterialFilter} />
+        <details className="rounded-[1.8rem] bg-slate-100/90 p-4">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-slate-600">
+            库位内筛选{materialFilter ? ` · ${materialFilter}` : ""}
+          </summary>
+          <div className="mt-4">
+            <SearchField label="筛选物料" value={materialFilter} placeholder="可输入简称、料号或描述再筛一次" onChange={setMaterialFilter} />
+          </div>
+        </details>
       </section>
 
       {error ? <div className="pf-panel border-red-200 bg-red-50/90 p-4 text-sm text-red-800">{error}</div> : null}
@@ -151,33 +172,46 @@ export function PalletSearchPage() {
           </section>
 
           <section className="space-y-3">
-            {filteredRows.map((row) => (
-              <div key={row.batchId} className="pf-panel p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-display text-2xl font-semibold text-ink">{row.shortCode || row.materialCode}</p>
-                    <p className="mt-1 text-sm font-medium text-slate-600">{row.materialCode}</p>
-                    <p className="mt-3 text-sm text-slate-600">{row.description || "暂无描述"}</p>
-                    <p className="mt-3 text-xs text-slate-500">
-                      {row.locationType ? `${formatLocationType(row.locationType)} · ` : ""}生产年月 {formatProductionMonth(row.productionDate)}
-                      {row.lotNo ? ` · 批次 ${row.lotNo}` : ""}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-ink">{formatQuantity(row.quantity)} PCS</span>
+            {filteredRows.map((row) => {
+              const isActive = row.batchId === selectedBatchId;
+
+              return (
+                <div key={row.batchId} className="pf-panel overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBatchId(row.batchId)}
+                    className="flex w-full items-start justify-between gap-3 p-4 text-left"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-display text-xl font-semibold text-ink">{row.shortCode || row.materialCode}</p>
+                      <p className="mt-1 text-sm font-medium text-slate-600">{row.materialCode}</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {row.locationType ? `${formatLocationType(row.locationType)} · ` : ""}生产年月 {formatProductionMonth(row.productionDate)}
+                        {row.lotNo ? ` · 批次 ${row.lotNo}` : ""}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-ink">{formatQuantity(row.quantity)} PCS</span>
+                  </button>
+
+                  {isActive ? (
+                    <div className="border-t border-white/60 bg-slate-100/90 p-4">
+                      <p className="text-sm leading-6 text-slate-600">{row.description || "暂无描述"}</p>
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </section>
 
-          <section className="pf-panel flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-display text-xl font-semibold text-ink">危险操作</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">清空库位会把当前库位的所有批次库存归零，并写入完整历史记录。</p>
+          <details className="pf-panel p-5">
+            <summary className="cursor-pointer list-none font-display text-xl font-semibold text-ink">危险操作</summary>
+            <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm leading-6 text-slate-600">清空库位会把当前库位的所有批次库存归零，并写入完整历史记录。</p>
+              <button type="button" onClick={handleClearPallet} disabled={submitting} className="pf-button-danger">
+                {submitting ? "正在清空..." : "清空库位"}
+              </button>
             </div>
-            <button type="button" onClick={handleClearPallet} disabled={submitting} className="pf-button-danger">
-              {submitting ? "正在清空..." : "清空库位"}
-            </button>
-          </section>
+          </details>
         </>
       ) : null}
     </div>
