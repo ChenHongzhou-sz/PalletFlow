@@ -11,7 +11,7 @@ import {
   parseTemperatureC,
   parseVoltageValue,
 } from "@/lib/materials/material-spec";
-import type { BarcodeAliasImportRow, ImportIssue, ImportPreviewResult, MaterialImportRow } from "@/types/import";
+import type { BarcodeAliasImportRow, ImportIssue, ImportPreviewResult, MaterialImportRow, PendingInventoryImportRow } from "@/types/import";
 
 function isBlankRow(row: string[]) {
   return row.every((cell) => cell.trim() === "");
@@ -289,5 +289,97 @@ export function validateBarcodeAliasesMatrix(matrix: string[][]): ImportPreviewR
     validRows: rows.filter((row) => !duplicateRowNumbers.has(row.rowNumber)),
     issues,
     duplicateKeys: duplicateInfo.duplicateKeys,
+  };
+}
+
+export function validatePendingInventoryCsv(text: string): ImportPreviewResult<PendingInventoryImportRow> {
+  return validatePendingInventoryMatrix(parseCsv(text));
+}
+
+export function validatePendingInventoryMatrix(matrix: string[][]): ImportPreviewResult<PendingInventoryImportRow> {
+  const issues: ImportIssue[] = [];
+
+  if (!matrix.length || isBlankRow(matrix[0] ?? [])) {
+    return {
+      totalRows: 0,
+      validRows: [],
+      issues: [
+        {
+          rowNumber: 1,
+          field: "file",
+          message: "CSV 为空，或者没有表头。",
+        },
+      ],
+      duplicateKeys: [],
+    };
+  }
+
+  const headers = matrix[0];
+  const columns = resolveImportColumns(headers, "pending_inventory");
+  const missingFields = getMissingImportFields(headers, "pending_inventory");
+
+  if (missingFields.length) {
+    return {
+      totalRows: 0,
+      validRows: [],
+      issues: [
+        {
+          rowNumber: 1,
+          field: missingFields.join(","),
+          message: `缺少必需列 ${missingFields.join("、")}。请至少提供“料号 / 数量”这两列。`,
+        },
+      ],
+      duplicateKeys: [],
+    };
+  }
+
+  const rows: PendingInventoryImportRow[] = [];
+
+  for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1) {
+    const row = matrix[rowIndex];
+
+    if (!row || isBlankRow(row)) {
+      continue;
+    }
+
+    const rowNumber = rowIndex + 1;
+    const read = (field: keyof typeof columns) => {
+      const columnIndex = columns[field];
+      return columnIndex === undefined ? "" : (row[columnIndex] ?? "").trim();
+    };
+
+    const materialCode = read("material_code");
+    const quantity = parseOptionalNumber(read("quantity"));
+
+    if (!materialCode) {
+      issues.push({
+        rowNumber,
+        field: "material_code",
+        message: "material_code 不能为空。",
+      });
+      continue;
+    }
+
+    if (quantity === null || quantity === undefined || quantity <= 0) {
+      issues.push({
+        rowNumber,
+        field: "quantity",
+        message: "quantity 必须是大于 0 的数字。",
+      });
+      continue;
+    }
+
+    rows.push({
+      rowNumber,
+      material_code: materialCode,
+      quantity,
+    });
+  }
+
+  return {
+    totalRows: rows.length,
+    validRows: rows,
+    issues,
+    duplicateKeys: [],
   };
 }

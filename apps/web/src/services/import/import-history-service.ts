@@ -3,7 +3,7 @@ import type { MasterDataImportRun } from "@/types/import";
 
 type ImportRunRow = {
   id: string;
-  import_type: "materials" | "barcode_aliases";
+  import_type: "materials" | "barcode_aliases" | "pending_inventory";
   source_file_name: string | null;
   operator_name: string | null;
   processed_rows: number;

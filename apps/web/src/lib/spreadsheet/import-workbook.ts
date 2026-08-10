@@ -71,7 +71,12 @@ export async function readImportWorkbook(file: File, mode: ImportMode) {
     }
   }
 
-  const expectedType = mode === "materials" ? "物料主数据" : "条码映射";
+  const expectedType =
+    mode === "materials"
+      ? "物料主数据"
+      : mode === "barcode_aliases"
+        ? "条码映射"
+        : "待上架库存";
   throw new Error(
     `没有找到可导入的 ${expectedType} 工作表。你可以继续使用系统模板里的 ${getPreferredImportSheetNames(mode)[0]}，也可以直接上传像“Sheet1”这样但表头匹配的工作表。`,
   );

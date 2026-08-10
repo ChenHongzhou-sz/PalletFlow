@@ -30,7 +30,7 @@ export function HomePage() {
       <ConfigNotice />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <ActionTile to={appRoutes.inbound} title="入库" subtitle="3 步录入库位、物料、批次" tone="soft" />
+        <ActionTile to={appRoutes.inbound} title="入库" subtitle="手动入库，或把待上架库存分配到正式库位" tone="soft" />
         <ActionTile to={appRoutes.outbound} title="出库" subtitle="按生产年月自动给出 FIFO 库位建议" tone="soft" />
         <ActionTile to={appRoutes.transfer} title="移库" subtitle="整库位换位，或把单个批次转到卡板 / 散料位" tone="soft" />
         <ActionTile to={appRoutes.cycleCount} title="盘点" subtitle="从库位开始核对系统数量与实际数量" tone="soft" />

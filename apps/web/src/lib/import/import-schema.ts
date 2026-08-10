@@ -30,10 +30,12 @@ type MaterialImportField =
   | "remark";
 
 type BarcodeAliasImportField = "barcode" | "material_code" | "remark";
+type PendingInventoryImportField = "material_code" | "quantity";
 
 type ImportFieldByMode = {
   materials: MaterialImportField;
   barcode_aliases: BarcodeAliasImportField;
+  pending_inventory: PendingInventoryImportField;
 };
 
 export type ImportColumnMap<T extends ImportMode> = Partial<Record<ImportFieldByMode[T], number>>;
@@ -41,6 +43,7 @@ export type ImportColumnMap<T extends ImportMode> = Partial<Record<ImportFieldBy
 const preferredSheetNames: Record<ImportMode, string[]> = {
   materials: ["materials", "material", "物料", "物料主数据", "主数据", "sheet1"],
   barcode_aliases: ["barcode_aliases", "barcode aliases", "barcode", "条码", "条码映射", "条码别名"],
+  pending_inventory: ["pending_inventory", "pending inventory", "待上架库存", "库存初始化", "待分配库存", "inventory"],
 };
 
 const fieldAliases: Record<ImportMode, Record<string, string[]>> = {
@@ -78,11 +81,16 @@ const fieldAliases: Record<ImportMode, Record<string, string[]>> = {
     material_code: ["material_code", "materialcode", "料号", "完整料号", "物料型号", "型号", "pn", "partnumber"],
     remark: ["remark", "remarks", "备注"],
   },
+  pending_inventory: {
+    material_code: ["material_code", "materialcode", "料号", "完整料号", "物料型号", "型号", "pn", "partnumber"],
+    quantity: ["quantity", "qty", "数量", "库存数量", "当前库存", "pcs"],
+  },
 };
 
 const requiredFields: Record<ImportMode, string[]> = {
   materials: ["material_code"],
   barcode_aliases: ["barcode", "material_code"],
+  pending_inventory: ["material_code", "quantity"],
 };
 
 export function normalizeImportToken(value: string) {

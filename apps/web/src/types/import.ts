@@ -1,4 +1,4 @@
-export type ImportMode = "materials" | "barcode_aliases";
+export type ImportMode = "materials" | "barcode_aliases" | "pending_inventory";
 
 export interface MaterialImportRow {
   rowNumber: number;
@@ -36,6 +36,12 @@ export interface BarcodeAliasImportRow {
   barcode: string;
   material_code: string;
   remark?: string;
+}
+
+export interface PendingInventoryImportRow {
+  rowNumber: number;
+  material_code: string;
+  quantity: number;
 }
 
 export interface ImportIssue {

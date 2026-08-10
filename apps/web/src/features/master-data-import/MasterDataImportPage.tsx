@@ -9,13 +9,15 @@ import {
   validateBarcodeAliasesMatrix,
   validateMaterialsCsv,
   validateMaterialsMatrix,
+  validatePendingInventoryCsv,
+  validatePendingInventoryMatrix,
 } from "@/lib/csv/import-validation";
 import { decodeImportFile } from "@/lib/csv/decode-import-file";
 import { resolveErrorMessage } from "@/lib/api/errors";
 import { formatDateTime } from "@/lib/formatters/date";
 import { readImportWorkbook } from "@/lib/spreadsheet/import-workbook";
 import { listRecentImportRuns } from "@/services/import/import-history-service";
-import { commitBarcodeAliasImport, commitMaterialImport } from "@/services/import/master-data-import-service";
+import { commitBarcodeAliasImport, commitMaterialImport, commitPendingInventoryImport } from "@/services/import/master-data-import-service";
 import { isSupabaseConfigured } from "@/services/supabase/client";
 import type {
   BarcodeAliasImportRow,
@@ -23,11 +25,13 @@ import type {
   ImportPreviewResult,
   MasterDataImportRun,
   MaterialImportRow,
+  PendingInventoryImportRow,
 } from "@/types/import";
 
 type PreviewState =
   | ImportPreviewResult<MaterialImportRow>
   | ImportPreviewResult<BarcodeAliasImportRow>
+  | ImportPreviewResult<PendingInventoryImportRow>
   | null;
 
 const modeCopy: Record<ImportMode, { title: string; description: string; required: string }> = {
@@ -40,6 +44,11 @@ const modeCopy: Record<ImportMode, { title: string; description: string; require
     title: "条码映射",
     description: "导入 barcode 到 material_code 的映射。同一个物料可以绑定多个条码。",
     required: "必需列：barcode、material_code",
+  },
+  pending_inventory: {
+    title: "待上架库存",
+    description: "只导入 material_code 和 quantity，先进入公共待分配池，后续上架时再录入库位和生产月。",
+    required: "必需列：material_code、quantity",
   },
 };
 
@@ -116,7 +125,12 @@ export function MasterDataImportPage() {
     try {
       if (sourceFile && sourceFile.name.toLowerCase().endsWith(".xlsx")) {
         const matrix = await readImportWorkbook(sourceFile, mode);
-        const nextPreview = mode === "materials" ? validateMaterialsMatrix(matrix) : validateBarcodeAliasesMatrix(matrix);
+        const nextPreview =
+          mode === "materials"
+            ? validateMaterialsMatrix(matrix)
+            : mode === "barcode_aliases"
+              ? validateBarcodeAliasesMatrix(matrix)
+              : validatePendingInventoryMatrix(matrix);
         setPreview(nextPreview);
         return;
       }
@@ -127,7 +141,12 @@ export function MasterDataImportPage() {
         return;
       }
 
-      const nextPreview = mode === "materials" ? validateMaterialsCsv(sourceText) : validateBarcodeAliasesCsv(sourceText);
+      const nextPreview =
+        mode === "materials"
+          ? validateMaterialsCsv(sourceText)
+          : mode === "barcode_aliases"
+            ? validateBarcodeAliasesCsv(sourceText)
+            : validatePendingInventoryCsv(sourceText);
       setPreview(nextPreview);
     } catch (reason) {
       setPreview(null);
@@ -155,9 +174,15 @@ export function MasterDataImportPage() {
       const result =
         mode === "materials"
           ? await commitMaterialImport(preview.validRows as MaterialImportRow[], sourceFileName, operatorName)
-          : await commitBarcodeAliasImport(preview.validRows as BarcodeAliasImportRow[], sourceFileName, operatorName);
+          : mode === "barcode_aliases"
+            ? await commitBarcodeAliasImport(preview.validRows as BarcodeAliasImportRow[], sourceFileName, operatorName)
+            : await commitPendingInventoryImport(preview.validRows as PendingInventoryImportRow[], sourceFileName, operatorName);
 
-      setMessage(`导入完成：处理 ${result.processed_count} 行，新增 ${result.created_count} 行，更新 ${result.updated_count} 行。`);
+      setMessage(
+        mode === "pending_inventory"
+          ? `待上架库存导入完成：处理 ${result.processed_count} 行，新增 ${result.created_count} 个待分配物料，累计更新 ${result.updated_count} 个物料。`
+          : `导入完成：处理 ${result.processed_count} 行，新增 ${result.created_count} 行，更新 ${result.updated_count} 行。`,
+      );
       await loadImportRuns();
     } catch (reason) {
       setError(resolveErrorMessage(reason));
@@ -184,15 +209,15 @@ export function MasterDataImportPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Master Data Import"
-        title="主数据导入"
-        description="给物料主数据和条码映射提供一条受控导入通道。前端先预校验，正式落库再走数据库事务函数。"
+        eyebrow="Data Import"
+        title="数据导入"
+        description="主数据、条码映射和待上架库存都走这里。先做前端预校验，再正式落库。"
       />
       <ConfigNotice />
 
       <section className="pf-panel space-y-5 p-5">
-        <div className="grid gap-3 sm:grid-cols-2">
-          {(["materials", "barcode_aliases"] as const).map((item) => {
+        <div className="grid gap-3 sm:grid-cols-3">
+          {(["materials", "barcode_aliases", "pending_inventory"] as const).map((item) => {
             const active = mode === item;
             return (
               <button
@@ -222,6 +247,9 @@ export function MasterDataImportPage() {
             <a className="ml-4 font-semibold text-ink underline" href={`${import.meta.env.BASE_URL}templates/barcode-aliases-import-template.csv`} download>
               条码 CSV 模板
             </a>
+            <a className="ml-4 font-semibold text-ink underline" href={`${import.meta.env.BASE_URL}templates/pending-inventory-import-template.csv`} download>
+              待上架库存 CSV 模板
+            </a>
             <a className="ml-4 font-semibold text-ink underline" href={`${import.meta.env.BASE_URL}templates/PalletFlow-master-data-import-template-v2.xlsx`} download>
               Excel 模板
             </a>
@@ -232,6 +260,9 @@ export function MasterDataImportPage() {
           <p className="mt-2">
             如果你的 CSV 来自 Excel，系统会自动识别 `UTF-8`、`GB18030` 或 `GBK` 编码，减少中文和特殊符号乱码问题。
           </p>
+          {mode === "pending_inventory" ? (
+            <p className="mt-2 text-amber-800">待上架库存不会直接进入正式 FIFO 库存，而是先进入 `IN-01` 对应的待分配池，等你后续上架时再录入库位和生产月。</p>
+          ) : null}
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
@@ -338,7 +369,7 @@ export function MasterDataImportPage() {
           </section>
 
           <button type="button" onClick={handleCommit} disabled={!canSubmit || submitting} className="pf-button-primary w-full">
-            {submitting ? "正在导入..." : "确认提交主数据"}
+            {submitting ? "正在导入..." : mode === "pending_inventory" ? "确认提交待上架库存" : "确认提交数据"}
           </button>
 
           {!isSupabaseConfigured ? (
@@ -375,7 +406,7 @@ export function MasterDataImportPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-display text-xl font-semibold text-ink">
-                      {run.importType === "materials" ? "物料主数据" : "条码映射"}
+                      {run.importType === "materials" ? "物料主数据" : run.importType === "barcode_aliases" ? "条码映射" : "待上架库存"}
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
                       {run.sourceFileName || "未记录文件名"}

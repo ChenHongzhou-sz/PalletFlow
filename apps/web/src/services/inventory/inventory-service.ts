@@ -57,6 +57,25 @@ type BatchTransferRpcRow = {
   target_quantity: number;
 };
 
+type PendingInventoryPoolRpcRow = {
+  material_id: string;
+  material_code: string;
+  short_code: string | null;
+  description: string | null;
+  pending_quantity: number;
+  source_file_name: string | null;
+  operator_name: string | null;
+  updated_at: string;
+};
+
+type PutawayPendingInventoryRpcRow = {
+  batch_id: string;
+  material_code: string;
+  moved_quantity: number;
+  target_location_code: string;
+  remaining_pending_quantity: number;
+};
+
 export interface CreateInboundInput {
   palletCode: string;
   materialCode: string;
@@ -95,6 +114,36 @@ export interface BatchTransferSummary {
   targetLocationCode: string;
   sourceRemainingQuantity: number;
   targetQuantity: number;
+}
+
+export interface PendingInventoryPoolItem {
+  materialId: string;
+  materialCode: string;
+  shortCode: string | null;
+  description: string | null;
+  pendingQuantity: number;
+  sourceFileName: string | null;
+  operatorName: string | null;
+  updatedAt: string;
+}
+
+export interface PutawayPendingInventoryInput {
+  materialCode: string;
+  targetLocationCode: string;
+  quantity: number;
+  productionDate: string;
+  lotNo?: string;
+  boxBarcode?: string;
+  operatorName?: string;
+  note?: string;
+}
+
+export interface PutawayPendingInventorySummary {
+  batchId: string;
+  materialCode: string;
+  movedQuantity: number;
+  targetLocationCode: string;
+  remainingPendingQuantity: number;
 }
 
 export async function createInboundBatch(input: CreateInboundInput) {
@@ -251,4 +300,55 @@ export async function transferInventoryBatch(input: BatchTransferInput) {
     sourceRemainingQuantity: Number(row.source_remaining_quantity ?? 0),
     targetQuantity: Number(row.target_quantity ?? 0),
   })) as BatchTransferSummary[];
+}
+
+export async function listPendingInventoryPool(query = "", limit = 20) {
+  const db = requireSupabase();
+  const { data, error } = await db.rpc("get_pending_inventory_pool", {
+    p_query: query.trim(),
+    p_limit: limit,
+    p_warehouse_code: "MAIN",
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as PendingInventoryPoolRpcRow[]).map((row) => ({
+    materialId: row.material_id,
+    materialCode: row.material_code,
+    shortCode: row.short_code,
+    description: row.description,
+    pendingQuantity: Number(row.pending_quantity ?? 0),
+    sourceFileName: row.source_file_name ?? null,
+    operatorName: row.operator_name ?? null,
+    updatedAt: row.updated_at,
+  })) as PendingInventoryPoolItem[];
+}
+
+export async function putawayPendingInventory(input: PutawayPendingInventoryInput) {
+  const db = requireSupabase();
+  const { data, error } = await db.rpc("putaway_pending_inventory", {
+    p_material_code: input.materialCode.trim(),
+    p_target_location_code: input.targetLocationCode.trim().toUpperCase(),
+    p_quantity: input.quantity,
+    p_production_date: input.productionDate,
+    p_warehouse_code: "MAIN",
+    p_lot_no: input.lotNo || null,
+    p_box_barcode: input.boxBarcode || null,
+    p_operator_name: input.operatorName || null,
+    p_note: input.note || null,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as PutawayPendingInventoryRpcRow[]).map((row) => ({
+    batchId: row.batch_id,
+    materialCode: row.material_code,
+    movedQuantity: Number(row.moved_quantity ?? 0),
+    targetLocationCode: row.target_location_code,
+    remainingPendingQuantity: Number(row.remaining_pending_quantity ?? 0),
+  })) as PutawayPendingInventorySummary[];
 }
