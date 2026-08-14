@@ -118,7 +118,7 @@ begin
     and ib.quantity > 0
   order by coalesce(ib.received_at, ib.created_at), ib.created_at, ib.id
   limit 1
-  for update of ib;
+  for update;
 
   if found then
     batch_id := v_existing.id;
@@ -714,7 +714,7 @@ begin
       and ib.batch_status = 'active'
       and ib.quantity > 0
     order by ib.production_date, coalesce(ib.received_at, ib.created_at), ib.created_at, ib.id
-    for update of ib
+    for update
   loop
     exit when v_remaining <= 0;
 
@@ -936,7 +936,7 @@ begin
       and ib.batch_status = 'active'
       and ib.quantity > 0
     order by ib.production_date, coalesce(ib.received_at, ib.created_at), ib.created_at, ib.id
-    for update of ib
+    for update
   loop
     v_line_no := v_line_no + 1;
     insert into public.stock_operation_lines (
@@ -1169,7 +1169,7 @@ begin
     and ib.deleted_at is null
     and ib.batch_status = 'active'
     and ib.quantity > 0
-  for update of ib;
+  for update;
 
   if not found then
     raise exception 'Batch % does not belong to source location %.', p_batch_id, v_source_code;
