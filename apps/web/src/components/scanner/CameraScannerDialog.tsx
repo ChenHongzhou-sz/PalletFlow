@@ -88,7 +88,7 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
 
   const [cameraStatusText, setCameraStatusText] = useState("正在启动摄像头...");
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [cameraEngineName, setCameraEngineName] = useState<string | null>(null);
+  const [cameraEngineName, setCameraEngineName] = useState<BarcodeScannerSession["engine"] | null>(null);
 
   const [imageBusy, setImageBusy] = useState(false);
   const [imageStatusText, setImageStatusText] = useState("可以直接拍一张箱标，系统会只解里面的条码，不再做文字识别。");
@@ -352,11 +352,13 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
             <div className="mt-4 rounded-[1.5rem] bg-slate-100 px-4 py-3 text-sm text-slate-600">
               <p>{cameraStatusText}</p>
               <p className="mt-2 text-xs text-slate-500">
-                {cameraEngineName === "native"
-                  ? "当前浏览器正在使用原生条码识别。"
-                  : canUseNativeBarcodeDetector()
-                    ? "当前浏览器也支持原生识别，但页面优先启用兼容性更高的一维码扫描。"
-                    : "当前浏览器会自动切换到兼容扫码组件，首次打开可能会稍慢 1 到 2 秒。"}
+                {cameraEngineName === "hybrid"
+                  ? "当前正在同时使用原生识别和高强度一维码解码。"
+                  : cameraEngineName === "native"
+                    ? "当前浏览器正在使用原生条码识别。"
+                    : canUseNativeBarcodeDetector()
+                      ? "当前会优先尝试原生识别，并用一维码解码兜底。"
+                      : "当前正在使用高强度一维码解码，首次打开可能会稍慢 1 到 2 秒。"}
               </p>
             </div>
 
@@ -398,11 +400,13 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
             <div className="mt-4 rounded-[1.5rem] bg-slate-100 px-4 py-3 text-sm text-slate-600">
               <p>{imageStatusText}</p>
               <p className="mt-2 text-xs text-slate-500">
-                {imageEngine === "native"
-                  ? "当前浏览器正在使用原生图片条码识别。"
-                  : imageEngine === "html5-qrcode"
-                    ? "当前浏览器已切换到兼容条码解码组件。"
-                    : "这里只识条码和二维码，不再识别文字。"}
+                {imageEngine === "hybrid"
+                  ? "当前正在同时尝试原生图片识别和高强度条码解码。"
+                  : imageEngine === "native"
+                    ? "当前浏览器正在使用原生图片条码识别。"
+                    : imageEngine === "zxing"
+                      ? "当前正在使用高强度条码解码。"
+                      : "这里只识条码和二维码，不再识别文字。"}
               </p>
             </div>
 

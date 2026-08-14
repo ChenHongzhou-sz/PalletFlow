@@ -13,19 +13,6 @@ const NATIVE_BARCODE_FORMATS = [
   "pdf417",
 ] as const;
 
-const COMMON_LINEAR_BARCODE_FORMATS = [
-  "code_128",
-  "code_39",
-  "code_93",
-  "codabar",
-  "ean_13",
-  "ean_8",
-  "itf",
-  "upc_a",
-  "upc_e",
-  "pdf417",
-] as const;
-
 type NativeBarcode = {
   rawValue?: string;
   format?: string;
@@ -42,54 +29,10 @@ type NativeBarcodeDetectorConstructor = {
   getSupportedFormats?: () => Promise<string[]>;
 };
 
-type Html5QrcodeCameraConfig = {
-  facingMode?: "user" | "environment" | { exact: string } | { ideal: string };
-};
+type ZxingModule = typeof import("html5-qrcode/third_party/zxing-js.umd");
 
-type Html5QrcodeScanConfig = {
-  fps?: number;
-  qrbox?:
-    | number
-    | { width: number; height: number }
-    | ((viewfinderWidth: number, viewfinderHeight: number) => { width: number; height: number });
-  aspectRatio?: number;
-  disableFlip?: boolean;
-  videoConstraints?: MediaTrackConstraints;
-};
-
-type Html5QrcodeDecodedResult = {
-  result?: {
-    format?: {
-      formatName?: string;
-    };
-  };
-};
-
-type Html5QrcodeImageScanResult = {
-  decodedText: string;
-  result?: {
-    format?: {
-      formatName?: string;
-    };
-  };
-};
-
-type Html5QrcodeInstance = {
-  start: (
-    cameraConfig: Html5QrcodeCameraConfig,
-    config: Html5QrcodeScanConfig,
-    onSuccess: (decodedText: string, decodedResult: Html5QrcodeDecodedResult) => void,
-    onError?: (errorMessage: string) => void,
-  ) => Promise<unknown>;
-  stop: () => Promise<void>;
-  clear: () => void;
-  scanFileV2: (imageFile: File, showImage?: boolean) => Promise<Html5QrcodeImageScanResult>;
-};
-
-type Html5QrcodeModule = typeof import("html5-qrcode");
-
-type BarcodeImageVariant = {
-  file: File;
+type CanvasVariant = {
+  canvas: HTMLCanvasElement;
   label: string;
 };
 
@@ -105,12 +48,12 @@ export interface BarcodeScanResult {
 }
 
 export interface BarcodeScannerSession {
-  engine: "native" | "html5-qrcode";
+  engine: "native" | "zxing" | "hybrid";
   stop: () => Promise<void>;
 }
 
 export interface BarcodeImageDecodeResult {
-  engine: "native" | "html5-qrcode";
+  engine: "native" | "zxing" | "hybrid";
   results: BarcodeScanResult[];
 }
 
@@ -119,17 +62,7 @@ interface StartBarcodeScannerOptions {
   onDetected: (result: BarcodeScanResult) => void;
 }
 
-let html5QrcodeLoader: Promise<Html5QrcodeModule> | null = null;
-
-function getBarcodeScanBox(viewfinderWidth: number, viewfinderHeight: number) {
-  const width = Math.max(280, Math.min(Math.floor(viewfinderWidth * 0.92), 520));
-  const height = Math.max(260, Math.min(Math.floor(viewfinderHeight * 0.72), 560));
-
-  return {
-    width,
-    height,
-  };
-}
+let zxingLoader: Promise<ZxingModule> | null = null;
 
 export function canUseCameraScanner() {
   return typeof window !== "undefined" && typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
@@ -151,55 +84,9 @@ export async function startCameraBarcodeScanner({
     throw new Error(getCameraScannerUnsupportedMessage());
   }
 
-  const nativeCapabilities = await resolveNativeBarcodeCapabilities();
-
-  try {
-    return await startHtml5QrcodeScanner(container, onDetected, {
-      useNativeBarcodeDetector: nativeCapabilities.preferNativeAssist,
-    });
-  } catch (error) {
-    if (!nativeCapabilities.fallbackFormats.length || !shouldFallbackToNativeScanner(error)) {
-      throw error;
-    }
-  }
-
-  return startNativeBarcodeScanner(container, onDetected, nativeCapabilities.fallbackFormats);
-}
-
-export async function decodeBarcodeImageFile(
-  file: File,
-  onStatus?: (message: string) => void,
-): Promise<BarcodeImageDecodeResult> {
-  const nativeCapabilities = await resolveNativeBarcodeCapabilities();
-
-  if (nativeCapabilities.fallbackFormats.length) {
-    const nativeResult = await tryDecodeBarcodeImageWithNative(file, nativeCapabilities.fallbackFormats, onStatus);
-    if (nativeResult.results.length) {
-      return nativeResult;
-    }
-  }
-
-  return decodeBarcodeImageWithHtml5Qrcode(file, onStatus);
-}
-
-function shouldFallbackToNativeScanner(error: unknown) {
-  if (!(error instanceof Error)) {
-    return true;
-  }
-
-  return !/permission|denied|notallowed|security/i.test(error.message);
-}
-
-async function startNativeBarcodeScanner(
-  container: HTMLElement,
-  onDetected: (result: BarcodeScanResult) => void,
-  formats: readonly string[],
-): Promise<BarcodeScannerSession> {
-  const BarcodeDetector = window.BarcodeDetector;
-
-  if (!BarcodeDetector) {
-    throw new Error("当前浏览器没有原生条码识别能力。");
-  }
+  const [zxing, nativeFormats] = await Promise.all([loadZxingModule(), getSupportedNativeBarcodeFormats()]);
+  const nativeDetector = createNativeBarcodeDetector(nativeFormats);
+  const zxingReader = createZxingReader(zxing);
 
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
@@ -209,12 +96,14 @@ async function startNativeBarcodeScanner(
       },
       width: {
         ideal: 1920,
+        min: 640,
       },
       height: {
         ideal: 1080,
+        min: 480,
       },
       frameRate: {
-        ideal: 24,
+        ideal: 30,
         max: 30,
       },
     },
@@ -229,22 +118,24 @@ async function startNativeBarcodeScanner(
   video.srcObject = stream;
 
   container.replaceChildren(video);
+  applyTrackOptimizations(stream);
 
   try {
     await video.play();
   } catch (error) {
-    stream.getTracks().forEach((track) => track.stop());
+    stopMediaStream(stream);
     container.replaceChildren();
     throw error;
   }
 
-  const detector = new BarcodeDetector({
-    formats,
-  });
+  const workingCanvas = document.createElement("canvas");
+  const cropCanvas = document.createElement("canvas");
+  const rotatedCanvas = document.createElement("canvas");
 
   let stopped = false;
   let frameId = 0;
-  let detecting = false;
+  let scanning = false;
+  let lastScanAt = 0;
 
   const stop = async () => {
     if (stopped) {
@@ -257,280 +148,302 @@ async function startNativeBarcodeScanner(
       window.cancelAnimationFrame(frameId);
     }
 
-    stream.getTracks().forEach((track) => track.stop());
+    stopMediaStream(stream);
     video.pause();
     video.srcObject = null;
     container.replaceChildren();
   };
 
-  const tick = async () => {
+  const tick = async (timestamp: number) => {
     if (stopped) {
       return;
     }
 
-    if (!detecting && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      detecting = true;
+    if (!scanning && timestamp - lastScanAt >= 90 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      scanning = true;
+      lastScanAt = timestamp;
 
       try {
-        const results = normalizeBarcodeResults(await detector.detect(video));
-        const matched = results.find((item) => item.text.length > 0);
+        const result = await scanVideoFrame({
+          video,
+          nativeDetector,
+          zxing,
+          zxingReader,
+          workingCanvas,
+          cropCanvas,
+          rotatedCanvas,
+        });
 
-        if (matched) {
+        if (result) {
           await stop();
-          onDetected(matched);
+          onDetected(result);
           return;
         }
       } catch {
-        // Ignore intermittent detector errors while the camera is warming up.
+        // Keep scanning. Camera frames often fail until focus and exposure settle.
       } finally {
-        detecting = false;
+        scanning = false;
       }
     }
 
-    frameId = window.requestAnimationFrame(() => {
-      void tick();
-    });
+    frameId = window.requestAnimationFrame(tick);
   };
 
-  frameId = window.requestAnimationFrame(() => {
-    void tick();
-  });
+  frameId = window.requestAnimationFrame(tick);
 
   return {
-    engine: "native",
+    engine: nativeDetector ? "hybrid" : "zxing",
     stop,
   };
 }
 
-async function startHtml5QrcodeScanner(
-  container: HTMLElement,
-  onDetected: (result: BarcodeScanResult) => void,
-  options: {
-    useNativeBarcodeDetector: boolean;
-  },
-): Promise<BarcodeScannerSession> {
-  const module = await loadHtml5QrcodeModule();
-  const mountNode = document.createElement("div");
-  const elementId = `pf-scanner-${Math.random().toString(36).slice(2, 10)}`;
-  mountNode.id = elementId;
-  mountNode.className = "h-full w-full";
-  container.replaceChildren(mountNode);
-
-  const scanner: Html5QrcodeInstance = new module.Html5Qrcode(elementId, {
-    verbose: false,
-    useBarCodeDetectorIfSupported: options.useNativeBarcodeDetector,
-    formatsToSupport: getHtml5SupportedFormats(module),
-  }) as Html5QrcodeInstance;
-
-  let stopped = false;
-
-  const stop = async () => {
-    if (stopped) {
-      return;
-    }
-
-    stopped = true;
-
-    try {
-      await scanner.stop();
-    } catch {
-      // Ignore stop errors when the camera did not finish booting.
-    }
-
-    try {
-      await scanner.clear();
-    } catch {
-      // Ignore clear errors after the DOM has already been removed.
-    }
-
-    container.replaceChildren();
-  };
-
-  try {
-    await scanner.start(
-      {
-        facingMode: "environment",
-      },
-      {
-        fps: 12,
-        qrbox: getBarcodeScanBox,
-        aspectRatio: 0.75,
-        disableFlip: true,
-        videoConstraints: {
-          facingMode: {
-            ideal: "environment",
-          },
-          width: {
-            ideal: 1920,
-          },
-          height: {
-            ideal: 1080,
-          },
-          frameRate: {
-            ideal: 24,
-            max: 30,
-          },
-        },
-      },
-      async (decodedText, decodedResult) => {
-        const text = decodedText.trim();
-
-        if (!text) {
-          return;
-        }
-
-        await stop();
-        onDetected({
-          text,
-          format: decodedResult?.result?.format?.formatName ?? null,
-        });
-      },
-      () => {
-        // html5-qrcode reports every non-match here; keep the UI quiet.
-      },
-    );
-  } catch (error) {
-    await stop();
-    throw normalizeScannerStartError(error);
-  }
-
-  return {
-    engine: "html5-qrcode",
-    stop,
-  };
-}
-
-async function tryDecodeBarcodeImageWithNative(
+export async function decodeBarcodeImageFile(
   file: File,
-  formats: readonly string[],
   onStatus?: (message: string) => void,
 ): Promise<BarcodeImageDecodeResult> {
-  const BarcodeDetector = window.BarcodeDetector;
-  if (!BarcodeDetector) {
-    return {
-      engine: "native",
-      results: [],
-    };
-  }
-
-  const detector = new BarcodeDetector({
-    formats,
-  });
-
+  const [zxing, nativeFormats] = await Promise.all([loadZxingModule(), getSupportedNativeBarcodeFormats()]);
+  const nativeDetector = createNativeBarcodeDetector(nativeFormats);
+  const zxingReader = createZxingReader(zxing);
   const image = await loadImageFromFile(file);
   const variants = buildImageCanvasVariants(image);
+  const results: BarcodeScanResult[] = [];
 
   for (const variant of variants) {
     onStatus?.(`正在尝试${variant.label}条码解码...`);
-    const bitmap = await createImageBitmap(variant.canvas);
 
-    try {
-      const results = normalizeBarcodeResults(await detector.detect(bitmap));
-      if (results.length) {
-        return {
-          engine: "native",
-          results,
-        };
+    if (nativeDetector) {
+      const bitmap = await createImageBitmap(variant.canvas);
+      try {
+        results.push(...normalizeBarcodeResults(await nativeDetector.detect(bitmap)));
+      } catch {
+        // Keep trying the ZXing decoder below.
+      } finally {
+        bitmap.close();
       }
-    } catch {
-      // Continue trying rotated variants.
-    } finally {
-      bitmap.close();
+    }
+
+    const zxingResult = decodeCanvasWithZxing(variant.canvas, zxing, zxingReader);
+    if (zxingResult) {
+      results.push(zxingResult);
     }
   }
 
+  const deduped = dedupeBarcodeResults(results);
+
+  if (!deduped.length) {
+    throw new Error("这张图片里没有识别到条码。请尽量只拍目标条码，或把手机横过来再扫。");
+  }
+
   return {
-    engine: "native",
-    results: [],
+    engine: nativeDetector ? "hybrid" : "zxing",
+    results: deduped,
   };
 }
 
-async function decodeBarcodeImageWithHtml5Qrcode(
-  file: File,
-  onStatus?: (message: string) => void,
-): Promise<BarcodeImageDecodeResult> {
-  const module = await loadHtml5QrcodeModule();
-  const host = document.createElement("div");
-  const hostId = `pf-image-scanner-${Math.random().toString(36).slice(2, 10)}`;
-  host.id = hostId;
-  host.className = "hidden";
-  document.body.appendChild(host);
+async function scanVideoFrame({
+  video,
+  nativeDetector,
+  zxing,
+  zxingReader,
+  workingCanvas,
+  cropCanvas,
+  rotatedCanvas,
+}: {
+  video: HTMLVideoElement;
+  nativeDetector: NativeBarcodeDetector | null;
+  zxing: ZxingModule;
+  zxingReader: unknown;
+  workingCanvas: HTMLCanvasElement;
+  cropCanvas: HTMLCanvasElement;
+  rotatedCanvas: HTMLCanvasElement;
+}) {
+  if (nativeDetector) {
+    const nativeResults = normalizeBarcodeResults(await nativeDetector.detect(video));
+    if (nativeResults.length) {
+      return nativeResults[0];
+    }
+  }
 
-  const scanner: Html5QrcodeInstance = new module.Html5Qrcode(hostId, {
-    verbose: false,
-    useBarCodeDetectorIfSupported: true,
-    formatsToSupport: getHtml5SupportedFormats(module),
-  }) as Html5QrcodeInstance;
+  drawVideoToCanvas(video, workingCanvas);
+
+  const variants = [
+    { canvas: workingCanvas, label: "全画面" },
+    { canvas: renderCenterCrop(workingCanvas, cropCanvas), label: "中心区域" },
+    { canvas: renderRotatedCanvas(workingCanvas, rotatedCanvas, 90), label: "旋转 90 度" },
+  ];
+
+  for (const variant of variants) {
+    const result = decodeCanvasWithZxing(variant.canvas, zxing, zxingReader);
+    if (result) {
+      return result;
+    }
+  }
+
+  return null;
+}
+
+function drawVideoToCanvas(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
+  const sourceWidth = video.videoWidth;
+  const sourceHeight = video.videoHeight;
+  const maxSide = 1280;
+  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d", {
+    willReadFrequently: true,
+  });
+  if (!context) {
+    throw new Error("当前浏览器无法处理扫码画面。");
+  }
+
+  context.drawImage(video, 0, 0, width, height);
+}
+
+function renderCenterCrop(source: HTMLCanvasElement, target: HTMLCanvasElement) {
+  const cropWidth = Math.floor(source.width * 0.92);
+  const cropHeight = Math.floor(source.height * 0.7);
+  const sx = Math.floor((source.width - cropWidth) / 2);
+  const sy = Math.floor((source.height - cropHeight) / 2);
+  target.width = cropWidth;
+  target.height = cropHeight;
+
+  const context = target.getContext("2d", {
+    willReadFrequently: true,
+  });
+  if (!context) {
+    throw new Error("当前浏览器无法处理扫码画面。");
+  }
+
+  context.drawImage(source, sx, sy, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  return target;
+}
+
+function renderRotatedCanvas(source: HTMLCanvasElement, target: HTMLCanvasElement, angle: 90 | 270) {
+  target.width = source.height;
+  target.height = source.width;
+
+  const context = target.getContext("2d", {
+    willReadFrequently: true,
+  });
+  if (!context) {
+    throw new Error("当前浏览器无法处理扫码画面。");
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, target.width, target.height);
+
+  if (angle === 90) {
+    context.translate(target.width, 0);
+    context.rotate(Math.PI / 2);
+  } else {
+    context.translate(0, target.height);
+    context.rotate(-Math.PI / 2);
+  }
+
+  context.drawImage(source, 0, 0);
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  return target;
+}
+
+function buildImageCanvasVariants(image: HTMLImageElement): CanvasVariant[] {
+  const source = renderImageToCanvas(image);
+  const clockwise = document.createElement("canvas");
+  const counterClockwise = document.createElement("canvas");
+  const centerCrop = document.createElement("canvas");
+
+  return [
+    { canvas: source, label: "原图" },
+    { canvas: renderCenterCrop(source, centerCrop), label: "中心区域" },
+    { canvas: renderRotatedCanvas(source, clockwise, 90), label: "顺时针旋转 90 度" },
+    { canvas: renderRotatedCanvas(source, counterClockwise, 270), label: "逆时针旋转 90 度" },
+  ];
+}
+
+function renderImageToCanvas(image: HTMLImageElement) {
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const maxSide = 1800;
+  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+
+  const context = canvas.getContext("2d", {
+    willReadFrequently: true,
+  });
+  if (!context) {
+    throw new Error("当前浏览器无法处理图片。");
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function decodeCanvasWithZxing(canvas: HTMLCanvasElement, zxing: ZxingModule, reader: unknown): BarcodeScanResult | null {
+  try {
+    const luminanceSource = new zxing.HTMLCanvasElementLuminanceSource(canvas);
+    const binaryBitmap = new zxing.BinaryBitmap(new zxing.HybridBinarizer(luminanceSource));
+    const decoded = (reader as { decode: (bitmap: unknown) => { text?: string; format?: unknown } }).decode(binaryBitmap);
+    const text = decoded.text?.trim();
+
+    if (!text) {
+      return null;
+    }
+
+    return {
+      text,
+      format: formatZxingBarcodeKind(decoded.format, zxing),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function createZxingReader(zxing: ZxingModule) {
+  const hints = new Map<unknown, unknown>();
+  hints.set(zxing.DecodeHintType.POSSIBLE_FORMATS, [
+    zxing.BarcodeFormat.CODE_128,
+    zxing.BarcodeFormat.EAN_13,
+    zxing.BarcodeFormat.EAN_8,
+    zxing.BarcodeFormat.UPC_A,
+    zxing.BarcodeFormat.UPC_E,
+    zxing.BarcodeFormat.CODE_39,
+    zxing.BarcodeFormat.CODE_93,
+    zxing.BarcodeFormat.ITF,
+    zxing.BarcodeFormat.CODABAR,
+    zxing.BarcodeFormat.QR_CODE,
+    zxing.BarcodeFormat.DATA_MATRIX,
+    zxing.BarcodeFormat.PDF_417,
+  ]);
+  hints.set(zxing.DecodeHintType.TRY_HARDER, true);
+
+  return new zxing.MultiFormatReader(false, hints);
+}
+
+function formatZxingBarcodeKind(format: unknown, zxing: ZxingModule) {
+  const entry = Object.entries(zxing.BarcodeFormat).find(([, value]) => value === format);
+  return entry?.[0] ?? null;
+}
+
+function createNativeBarcodeDetector(formats: string[]) {
+  const BarcodeDetector = window.BarcodeDetector;
+
+  if (!BarcodeDetector || !formats.length) {
+    return null;
+  }
 
   try {
-    const variants = await buildImageFileVariants(file);
-
-    for (const variant of variants) {
-      onStatus?.(`正在尝试${variant.label}条码解码...`);
-
-      try {
-        const result = await scanner.scanFileV2(variant.file, false);
-        const text = result.decodedText.trim();
-
-        if (text) {
-          return {
-            engine: "html5-qrcode",
-            results: [
-              {
-                text,
-                format: result.result?.format?.formatName ?? null,
-              },
-            ],
-          };
-        }
-      } catch {
-        // Continue trying rotated variants.
-      } finally {
-        try {
-          scanner.clear();
-        } catch {
-          // Ignore clear errors between image attempts.
-        }
-      }
-    }
-  } finally {
-    try {
-      scanner.clear();
-    } catch {
-      // Ignore clear errors during cleanup.
-    }
-
-    host.remove();
+    return new BarcodeDetector({
+      formats,
+    });
+  } catch {
+    return null;
   }
-
-  throw new Error("这张图片里没有识别到条码。请尽量只拍目标条码，或把手机横过来再扫。");
-}
-
-async function resolveNativeBarcodeCapabilities() {
-  const supportedFormats = await getSupportedNativeBarcodeFormats();
-
-  if (!supportedFormats.length) {
-    return {
-      preferNativeAssist: false,
-      fallbackFormats: [] as string[],
-    };
-  }
-
-  const supportsCommonLinearCodes = supportedFormats.some((format) =>
-    COMMON_LINEAR_BARCODE_FORMATS.includes(format as (typeof COMMON_LINEAR_BARCODE_FORMATS)[number]),
-  );
-
-  if (!supportsCommonLinearCodes) {
-    return {
-      preferNativeAssist: false,
-      fallbackFormats: [] as string[],
-    };
-  }
-
-  return {
-    preferNativeAssist: true,
-    fallbackFormats: supportedFormats,
-  };
 }
 
 async function getSupportedNativeBarcodeFormats() {
@@ -553,155 +466,101 @@ async function getSupportedNativeBarcodeFormats() {
   }
 }
 
-function getHtml5SupportedFormats(module: Html5QrcodeModule) {
-  return [
-    module.Html5QrcodeSupportedFormats.CODE_128,
-    module.Html5QrcodeSupportedFormats.CODE_39,
-    module.Html5QrcodeSupportedFormats.CODE_93,
-    module.Html5QrcodeSupportedFormats.CODABAR,
-    module.Html5QrcodeSupportedFormats.ITF,
-    module.Html5QrcodeSupportedFormats.EAN_13,
-    module.Html5QrcodeSupportedFormats.EAN_8,
-    module.Html5QrcodeSupportedFormats.PDF_417,
-    module.Html5QrcodeSupportedFormats.UPC_A,
-    module.Html5QrcodeSupportedFormats.UPC_E,
-    module.Html5QrcodeSupportedFormats.QR_CODE,
-    module.Html5QrcodeSupportedFormats.DATA_MATRIX,
-  ];
-}
+async function loadZxingModule() {
+  if (!zxingLoader) {
+    zxingLoader = import("html5-qrcode/third_party/zxing-js.umd").catch((error) => {
+      zxingLoader = null;
+      if (error instanceof Error) {
+        throw error;
+      }
 
-async function loadHtml5QrcodeModule() {
-  if (!html5QrcodeLoader) {
-    html5QrcodeLoader = import("html5-qrcode")
-      .then((module: Html5QrcodeModule) => {
-        if (typeof module.Html5Qrcode === "function") {
-          return module;
-        }
-
-        html5QrcodeLoader = null;
-        throw new Error("Scanner module loaded without Html5Qrcode.");
-      })
-      .catch((error) => {
-        html5QrcodeLoader = null;
-        if (error instanceof Error) {
-          throw error;
-        }
-
-        throw new Error("Unable to load the barcode scanner module.");
-      });
+      throw new Error("Unable to load the barcode scanner module.");
+    });
   }
 
-  return html5QrcodeLoader;
+  return zxingLoader;
 }
 
 function normalizeBarcodeResults(results: NativeBarcode[] | BarcodeScanResult[]) {
-  const normalized = results
-    .map((item) => {
-      if ("text" in item) {
+  return dedupeBarcodeResults(
+    results
+      .map((item) => {
+        if ("text" in item) {
+          return {
+            text: item.text.trim(),
+            format: item.format ?? null,
+          };
+        }
+
         return {
-          text: item.text.trim(),
+          text: item.rawValue?.trim() ?? "",
           format: item.format ?? null,
         };
-      }
+      })
+      .filter((item) => item.text.length > 0),
+  );
+}
 
-      return {
-        text: item.rawValue?.trim() ?? "",
-        format: item.format ?? null,
-      };
-    })
-    .filter((item) => item.text.length > 0);
-
+function dedupeBarcodeResults(results: BarcodeScanResult[]) {
   const deduped = new Map<string, BarcodeScanResult>();
 
-  for (const item of normalized) {
-    const key = `${item.text}::${item.format ?? ""}`;
+  for (const item of results) {
+    const key = `${item.text.trim()}::${item.format ?? ""}`;
     if (!deduped.has(key)) {
-      deduped.set(key, item);
+      deduped.set(key, {
+        text: item.text.trim(),
+        format: item.format ?? null,
+      });
     }
   }
 
   return Array.from(deduped.values());
 }
 
-async function buildImageFileVariants(file: File) {
-  const image = await loadImageFromFile(file);
-  const canvasVariants = buildImageCanvasVariants(image);
-  const variants: BarcodeImageVariant[] = [{ file, label: "原图" }];
+function applyTrackOptimizations(stream: MediaStream) {
+  const track = stream.getVideoTracks()[0];
+  if (!track || typeof track.applyConstraints !== "function") {
+    return;
+  }
 
-  for (const variant of canvasVariants) {
-    if (variant.angle === 0) {
-      continue;
+  const capabilities = typeof track.getCapabilities === "function" ? (track.getCapabilities() as Record<string, unknown>) : {};
+  const advanced: Record<string, unknown> = {};
+
+  if (Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes("continuous")) {
+    advanced.focusMode = "continuous";
+  }
+
+  if (Array.isArray(capabilities.exposureMode) && capabilities.exposureMode.includes("continuous")) {
+    advanced.exposureMode = "continuous";
+  }
+
+  if (Array.isArray(capabilities.whiteBalanceMode) && capabilities.whiteBalanceMode.includes("continuous")) {
+    advanced.whiteBalanceMode = "continuous";
+  }
+
+  if (typeof capabilities.zoom === "object" && capabilities.zoom !== null) {
+    const zoomCapability = capabilities.zoom as { min?: number; max?: number };
+    const min = typeof zoomCapability.min === "number" ? zoomCapability.min : 1;
+    const max = typeof zoomCapability.max === "number" ? zoomCapability.max : 1;
+    const targetZoom = Math.min(max, Math.max(min, 1.4));
+    if (targetZoom > min) {
+      advanced.zoom = targetZoom;
     }
-
-    variants.push({
-      file: await canvasToFile(variant.canvas, file, variant.angle),
-      label: variant.label,
-    });
   }
 
-  return variants;
-}
-
-function buildImageCanvasVariants(image: HTMLImageElement) {
-  return [
-    { angle: 0, label: "原图", canvas: renderRotatedCanvas(image, 0) },
-    { angle: 90, label: "顺时针旋转 90°", canvas: renderRotatedCanvas(image, 90) },
-    { angle: 270, label: "逆时针旋转 90°", canvas: renderRotatedCanvas(image, 270) },
-    { angle: 180, label: "旋转 180°", canvas: renderRotatedCanvas(image, 180) },
-  ];
-}
-
-function renderRotatedCanvas(image: HTMLImageElement, angle: 0 | 90 | 180 | 270) {
-  const sourceWidth = image.naturalWidth || image.width;
-  const sourceHeight = image.naturalHeight || image.height;
-  const canvas = document.createElement("canvas");
-  const rotateRightAngle = angle === 90 || angle === 270;
-  canvas.width = rotateRightAngle ? sourceHeight : sourceWidth;
-  canvas.height = rotateRightAngle ? sourceWidth : sourceHeight;
-
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("当前浏览器无法处理图片。");
+  if (!Object.keys(advanced).length) {
+    return;
   }
 
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  if (angle === 90) {
-    context.translate(canvas.width, 0);
-    context.rotate(Math.PI / 2);
-  } else if (angle === 180) {
-    context.translate(canvas.width, canvas.height);
-    context.rotate(Math.PI);
-  } else if (angle === 270) {
-    context.translate(0, canvas.height);
-    context.rotate(-Math.PI / 2);
-  }
-
-  context.drawImage(image, 0, 0, sourceWidth, sourceHeight);
-  return canvas;
-}
-
-async function canvasToFile(canvas: HTMLCanvasElement, file: File, angle: number) {
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((nextBlob) => {
-      if (nextBlob) {
-        resolve(nextBlob);
-        return;
-      }
-
-      reject(new Error("图片转换失败，请换一张图片再试。"));
-    }, file.type || "image/jpeg");
+  void track.applyConstraints({
+    advanced: [advanced],
+  } as MediaTrackConstraints).catch(() => {
+    // Some mobile browsers expose capabilities but reject one or more values.
   });
+}
 
-  const dotIndex = file.name.lastIndexOf(".");
-  const baseName = dotIndex > 0 ? file.name.slice(0, dotIndex) : file.name;
-  const extension = dotIndex > 0 ? file.name.slice(dotIndex) : ".jpg";
-
-  return new File([blob], `${baseName}-rot${angle}${extension}`, {
-    type: blob.type || file.type || "image/jpeg",
-    lastModified: file.lastModified,
-  });
+function stopMediaStream(stream: MediaStream) {
+  stream.getTracks().forEach((track) => track.stop());
 }
 
 function loadImageFromFile(file: File) {
@@ -719,24 +578,4 @@ function loadImageFromFile(file: File) {
     };
     image.src = objectUrl;
   });
-}
-
-function normalizeScannerStartError(error: unknown) {
-  if (error instanceof Error) {
-    if (/permission|denied|notallowed/i.test(error.message)) {
-      return new Error("没有拿到摄像头权限。请允许浏览器访问相机后再试。");
-    }
-
-    if (/notfound|devicesnotfound|overconstrained/i.test(error.message)) {
-      return new Error("没有找到可用的后置摄像头。请检查手机相机权限或换一台设备。");
-    }
-
-    if (/load|import|chunk/i.test(error.message)) {
-      return new Error("扫码组件加载失败，请刷新页面后重试。");
-    }
-
-    return error;
-  }
-
-  return new Error("扫码初始化失败，请刷新页面后重试。");
 }
