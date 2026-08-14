@@ -13,6 +13,10 @@ const NATIVE_BARCODE_FORMATS = [
   "pdf417",
 ] as const;
 
+const CAMERA_SCAN_INTERVAL_MS = 80;
+const CAMERA_SCAN_BAND_WIDTH_RATIO = 0.94;
+const CAMERA_SCAN_BAND_HEIGHT_RATIO = 0.34;
+
 type NativeBarcode = {
   rawValue?: string;
   format?: string;
@@ -159,7 +163,7 @@ export async function startCameraBarcodeScanner({
       return;
     }
 
-    if (!scanning && timestamp - lastScanAt >= 90 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    if (!scanning && timestamp - lastScanAt >= CAMERA_SCAN_INTERVAL_MS && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
       scanning = true;
       lastScanAt = timestamp;
 
@@ -257,19 +261,20 @@ async function scanVideoFrame({
   cropCanvas: HTMLCanvasElement;
   rotatedCanvas: HTMLCanvasElement;
 }) {
+  drawVideoToCanvas(video, workingCanvas);
+
+  const scanBandCanvas = renderCameraScanBand(workingCanvas, cropCanvas);
+
   if (nativeDetector) {
-    const nativeResults = normalizeBarcodeResults(await nativeDetector.detect(video));
+    const nativeResults = normalizeBarcodeResults(await nativeDetector.detect(scanBandCanvas));
     if (nativeResults.length) {
       return nativeResults[0];
     }
   }
 
-  drawVideoToCanvas(video, workingCanvas);
-
   const variants = [
-    { canvas: workingCanvas, label: "全画面" },
-    { canvas: renderCenterCrop(workingCanvas, cropCanvas), label: "中心区域" },
-    { canvas: renderRotatedCanvas(workingCanvas, rotatedCanvas, 90), label: "旋转 90 度" },
+    { canvas: scanBandCanvas, label: "长条取景区" },
+    { canvas: renderRotatedCanvas(scanBandCanvas, rotatedCanvas, 90), label: "长条取景区旋转 90 度" },
   ];
 
   for (const variant of variants) {
@@ -300,6 +305,25 @@ function drawVideoToCanvas(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
   }
 
   context.drawImage(video, 0, 0, width, height);
+}
+
+function renderCameraScanBand(source: HTMLCanvasElement, target: HTMLCanvasElement) {
+  const cropWidth = Math.floor(source.width * CAMERA_SCAN_BAND_WIDTH_RATIO);
+  const cropHeight = Math.floor(source.height * CAMERA_SCAN_BAND_HEIGHT_RATIO);
+  const sx = Math.floor((source.width - cropWidth) / 2);
+  const sy = Math.floor((source.height - cropHeight) / 2);
+  target.width = cropWidth;
+  target.height = cropHeight;
+
+  const context = target.getContext("2d", {
+    willReadFrequently: true,
+  });
+  if (!context) {
+    throw new Error("当前浏览器无法处理扫码画面。");
+  }
+
+  context.drawImage(source, sx, sy, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  return target;
 }
 
 function renderCenterCrop(source: HTMLCanvasElement, target: HTMLCanvasElement) {

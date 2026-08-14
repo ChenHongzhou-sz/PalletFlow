@@ -19,8 +19,14 @@ interface CameraScannerDialogProps {
 
 type ScannerMode = "camera" | "gallery";
 
+const SCAN_RESULT_MAX_LENGTH = 14;
+
 function resolveReasonMessage(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
+}
+
+function normalizeDetectedValue(value: string) {
+  return value.trim().slice(0, SCAN_RESULT_MAX_LENGTH);
 }
 
 function formatBarcodeKind(format: string | null) {
@@ -130,7 +136,7 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
     startCameraBarcodeScanner({
       container: previewRef.current,
       onDetected: ({ text }) => {
-        onDetected(text);
+        onDetected(normalizeDetectedValue(text));
       },
     })
       .then((session) => {
@@ -141,7 +147,7 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
 
         sessionRef.current = session;
         setCameraEngineName(session.engine);
-        setCameraStatusText("正在识别条码，识别成功后会自动回填。");
+        setCameraStatusText("正在识别中间长条区域，成功后只回填前 14 位。");
       })
       .catch((reason) => {
         if (disposed) {
@@ -169,8 +175,8 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
 
     const timer = window.setTimeout(() => {
       setCameraStatusText((current) =>
-        current === "正在识别条码，识别成功后会自动回填。"
-          ? "如果是像你箱标那样竖着的一维码，请把手机横过来，让黑线横着穿过取景框。"
+        current === "正在识别中间长条区域，成功后只回填前 14 位。"
+          ? "把目标条码单独放进中间亮框，旁边其它条码尽量不要进入亮框。"
           : current,
       );
     }, 2200);
@@ -268,8 +274,8 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
       setImageResults(rankedResults);
       setImageStatusText(
         rankedResults.length === 1
-          ? "已识别到 1 个条码，点一下即可回填。"
-          : `已识别到 ${rankedResults.length} 个条码，请选择要回填的那个。`,
+          ? "已识别到 1 个条码，点一下会回填前 14 位。"
+          : `已识别到 ${rankedResults.length} 个条码，请选择要回填的那个，会自动取前 14 位。`,
       );
     } catch (reason) {
       setImageError(resolveReasonMessage(reason, "图片条码识别失败，请换一张更清晰的条码图片。"));
@@ -280,7 +286,7 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
   }
 
   function handleSelectResult(result: BarcodeScanResult) {
-    onDetected(result.text.trim());
+    onDetected(normalizeDetectedValue(result.text));
     onClose();
   }
 
@@ -306,7 +312,7 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
               扫码录入
             </h2>
             <p id={descriptionId} className="mt-2 text-sm leading-6 text-slate-600">
-              先用摄像头扫；如果像你这张箱标一样是一维条码又细又竖，就切到“相册识码”，直接解图片里的条码。
+              把目标条码放进中间长条取景框。识别成功后只回填扫码结果的前 14 位。
             </p>
           </div>
 
@@ -335,19 +341,21 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
         {mode === "camera" ? (
           <>
             <div className="mt-4 shrink-0 overflow-hidden rounded-[1.75rem] bg-slate-950">
-              <div className="relative aspect-[3/4] w-full bg-slate-900">
+              <div className="relative aspect-[22/9] w-full bg-slate-900">
                 <div ref={previewRef} className="pf-scanner-preview h-full w-full" />
                 {!cameraError ? (
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <div className="relative h-[72%] w-[88%] rounded-[1.75rem] border-2 border-dashed border-white/80 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.14)]">
-                      <div className="absolute inset-x-6 top-1/2 border-t border-white/70" />
-                      <div className="absolute inset-y-6 left-1/2 border-l border-white/35" />
+                    <div className="relative h-[58%] w-[92%] rounded-[1.25rem] border-2 border-dashed border-white/90 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.34)]">
+                      <div className="absolute inset-x-5 top-1/2 border-t-2 border-ember/90 shadow-[0_0_18px_rgba(245,158,11,0.65)]" />
+                      <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-slate-950/70 px-3 py-1 text-[11px] font-semibold text-white">
+                        只扫此长条区域
+                      </div>
                     </div>
                   </div>
                 ) : null}
               </div>
             </div>
-            <p className="mt-3 text-xs leading-6 text-slate-500">一维码建议让整段黑线完整进入框内。若条码是竖着的，请把手机横过来再扫。</p>
+            <p className="mt-3 text-xs leading-6 text-slate-500">一维码建议让整段黑线完整进入亮框内。画面里条码多时，只让目标条码穿过中间橙色线。</p>
 
             <div className="mt-4 rounded-[1.5rem] bg-slate-100 px-4 py-3 text-sm text-slate-600">
               <p>{cameraStatusText}</p>
@@ -422,7 +430,9 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="break-all font-display text-xl font-semibold text-ink">{result.text}</p>
-                        <p className="mt-2 text-xs leading-6 text-slate-500">{formatBarcodeKind(result.format)}</p>
+                        <p className="mt-2 text-xs leading-6 text-slate-500">
+                          {formatBarcodeKind(result.format)} · 回填前 14 位：{normalizeDetectedValue(result.text)}
+                        </p>
                       </div>
                       {index === 0 ? <span className="pf-pill bg-ink text-white">推荐</span> : null}
                     </div>
