@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { ConfigNotice } from "@/components/feedback/ConfigNotice";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { PalletCodeField } from "@/components/forms/PalletCodeField";
@@ -9,14 +10,21 @@ import { SegmentedSwitch } from "@/components/mobile/SegmentedSwitch";
 import { StepStrip } from "@/components/mobile/StepStrip";
 import { ScanActionButton } from "@/components/scanner/ScanActionButton";
 import { resolveErrorMessage } from "@/lib/api/errors";
+import { appRoutes } from "@/lib/constants/routes";
 import { formatDateTime } from "@/lib/formatters/date";
 import { formatQuantity } from "@/lib/formatters/number";
 import { createInboundBatch, listPendingInventoryPool, putawayPendingInventory, type PendingInventoryPoolItem } from "@/services/inventory/inventory-service";
 import { searchMaterials } from "@/services/search/search-service";
 import type { MaterialSearchItem } from "@/types/domain";
 
+function resolveInboundMode(modeParam: string | null): "manual" | "pending" {
+  return modeParam === "pending" ? "pending" : "manual";
+}
+
 export function InboundPage() {
-  const [inboundMode, setInboundMode] = useState<"manual" | "pending">("manual");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const modeParam = searchParams.get("mode");
+  const [inboundMode, setInboundMode] = useState<"manual" | "pending">(() => resolveInboundMode(modeParam));
   const [palletCode, setPalletCode] = useState("");
   const [materialQuery, setMaterialQuery] = useState("");
   const deferredMaterialQuery = useDeferredValue(materialQuery.trim());
@@ -139,6 +147,21 @@ export function InboundPage() {
       setPendingQuantity(String(selectedPendingItem.pendingQuantity));
     }
   }, [pendingQuantity, selectedPendingItem]);
+
+  useEffect(() => {
+    const nextMode = resolveInboundMode(modeParam);
+    setInboundMode((currentMode) => (currentMode === nextMode ? currentMode : nextMode));
+  }, [modeParam]);
+
+  function handleInboundModeChange(nextMode: "manual" | "pending") {
+    setInboundMode(nextMode);
+    setError(null);
+    setMessage(null);
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set("mode", nextMode);
+    setSearchParams(nextSearchParams, { replace: true });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -268,7 +291,7 @@ export function InboundPage() {
           { value: "pending", label: "待上架分配" },
         ]}
         value={inboundMode}
-        onChange={setInboundMode}
+        onChange={(value) => handleInboundModeChange(value as "manual" | "pending")}
       />
 
       <details className="pf-panel p-4">
@@ -362,6 +385,15 @@ export function InboundPage() {
           <div>
             <h2 className="font-display text-2xl font-semibold text-ink">待上架分配</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">先从 `IN-01` 待分配池选物料，再填写目标库位和生产年月，系统才会生成正式 FIFO 库存。</p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Link to={`${appRoutes.masterDataImport}?mode=pending_inventory`} className="pf-button-secondary text-center">
+              先导入料号 + 数量
+            </Link>
+            <button type="button" onClick={() => setPendingReloadKey((current) => current + 1)} className="pf-button-secondary">
+              刷新待分配池
+            </button>
           </div>
 
           <SearchField
@@ -472,7 +504,12 @@ export function InboundPage() {
       ) : null}
 
       {inboundMode === "pending" && !pendingLoading && !pendingItems.length ? (
-        <EmptyState title="当前没有待上架库存" description="先去“数据导入”里上传料号和数量，系统会先把它们放进待分配池，之后你再到这里分配正式库位和生产月。" />
+        <div className="space-y-3">
+          <EmptyState title="当前没有待上架库存" description="先去“数据导入”里上传料号和数量，系统会先把它们放进待分配池，之后你再到这里分配正式库位和生产月。" />
+          <Link to={`${appRoutes.masterDataImport}?mode=pending_inventory`} className="pf-button-secondary block text-center">
+            去导入待上架库存
+          </Link>
+        </div>
       ) : null}
     </div>
   );

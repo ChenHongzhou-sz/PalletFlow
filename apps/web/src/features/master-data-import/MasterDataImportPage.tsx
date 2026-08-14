@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { ConfigNotice } from "@/components/feedback/ConfigNotice";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { StatCard } from "@/components/feedback/StatCard";
@@ -16,6 +17,7 @@ import { decodeImportFile } from "@/lib/csv/decode-import-file";
 import { resolveErrorMessage } from "@/lib/api/errors";
 import { formatDateTime } from "@/lib/formatters/date";
 import { readImportWorkbook } from "@/lib/spreadsheet/import-workbook";
+import { appRoutes } from "@/lib/constants/routes";
 import { listRecentImportRuns } from "@/services/import/import-history-service";
 import { commitBarcodeAliasImport, commitMaterialImport, commitPendingInventoryImport } from "@/services/import/master-data-import-service";
 import { isSupabaseConfigured } from "@/services/supabase/client";
@@ -52,8 +54,18 @@ const modeCopy: Record<ImportMode, { title: string; description: string; require
   },
 };
 
+function resolveImportMode(modeParam: string | null): ImportMode {
+  if (modeParam === "barcode_aliases" || modeParam === "pending_inventory") {
+    return modeParam;
+  }
+
+  return "materials";
+}
+
 export function MasterDataImportPage() {
-  const [mode, setMode] = useState<ImportMode>("materials");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const modeParam = searchParams.get("mode");
+  const [mode, setMode] = useState<ImportMode>(() => resolveImportMode(modeParam));
   const [operatorName, setOperatorName] = useState("");
   const [sourceFileName, setSourceFileName] = useState("");
   const [sourceText, setSourceText] = useState("");
@@ -66,6 +78,7 @@ export function MasterDataImportPage() {
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [lastCommittedMode, setLastCommittedMode] = useState<ImportMode | null>(null);
 
   const modeMeta = modeCopy[mode];
   const canSubmit = Boolean(preview && preview.validRows.length > 0 && preview.issues.length === 0 && isSupabaseConfigured);
@@ -171,6 +184,7 @@ export function MasterDataImportPage() {
     setSubmitting(true);
     setError(null);
     setMessage(null);
+    setLastCommittedMode(null);
 
     try {
       const result =
@@ -185,6 +199,7 @@ export function MasterDataImportPage() {
           ? `待上架库存导入完成：处理 ${result.processed_count} 行，新增 ${result.created_count} 个待分配物料，累计更新 ${result.updated_count} 个物料。`
           : `导入完成：处理 ${result.processed_count} 行，新增 ${result.created_count} 行，更新 ${result.updated_count} 行。`,
       );
+      setLastCommittedMode(mode);
       await loadImportRuns();
     } catch (reason) {
       setError(resolveErrorMessage(reason));
@@ -198,6 +213,11 @@ export function MasterDataImportPage() {
     setPreview(null);
     setError(null);
     setMessage(null);
+    setLastCommittedMode(null);
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set("mode", nextMode);
+    setSearchParams(nextSearchParams, { replace: true });
   }
 
   useEffect(() => {
@@ -207,6 +227,11 @@ export function MasterDataImportPage() {
       });
     }
   }, []);
+
+  useEffect(() => {
+    const nextMode = resolveImportMode(modeParam);
+    setMode((currentMode) => (currentMode === nextMode ? currentMode : nextMode));
+  }, [modeParam]);
 
   return (
     <div className="space-y-5">
@@ -318,6 +343,19 @@ export function MasterDataImportPage() {
 
       {error ? <div className="pf-panel border-red-200 bg-red-50/90 p-4 text-sm text-red-800">{error}</div> : null}
       {message ? <div className="pf-panel border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-800">{message}</div> : null}
+      {lastCommittedMode === "pending_inventory" && message ? (
+        <div className="pf-panel border-amber-200 bg-amber-50/80 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-ink">下一步去“待上架分配”，把这批库存分到正式库位并补录生产年月。</p>
+              <p className="mt-1 text-sm text-slate-600">在完成上架前，这批数据还只停留在公共待分配池，不会进入正式库存和 FIFO。</p>
+            </div>
+            <Link to={`${appRoutes.inbound}?mode=pending`} className="pf-button-primary text-center sm:min-w-44">
+              去待上架分配
+            </Link>
+          </div>
+        </div>
+      ) : null}
 
       {preview ? (
         <>
