@@ -383,7 +383,7 @@ export function MaterialSearchPage() {
                       生产月 {formatProductionMonth(row.productionDate)}
                       {row.dateCodeSummary ? ` / DC ${row.dateCodeSummary}` : ""}
                       {row.lotSummary ? ` / 批号 ${row.lotSummary}` : ""}
-                      {` / 已合并 ${row.mergedEntryCount} 次入库`}
+                      {row.mergedEntryCount > 1 ? ` / 已合并 ${row.mergedEntryCount} 次入库` : ""}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
                       {row.boxBarcodeSummary ? <span>箱码 {row.boxBarcodeSummary}</span> : null}

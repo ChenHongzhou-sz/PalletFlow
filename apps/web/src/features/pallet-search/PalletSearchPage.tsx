@@ -191,7 +191,7 @@ export function PalletSearchPage() {
                       <p className="mt-1 text-sm font-medium text-slate-600">{group.materialCode}</p>
                       <p className="mt-2 text-xs text-slate-500">
                         {group.locationType ? `${formatLocationType(group.locationType)} · ` : ""}生产年月 {formatProductionMonth(group.productionDate)}
-                        {` · 已合并 ${group.mergedEntryCount} 次入库`}
+                        {group.mergedEntryCount > 1 ? ` · 已合并 ${group.mergedEntryCount} 次入库` : ""}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
                         {group.stockFormSummary ? <span className="pf-pill bg-slate-100 text-slate-600">{formatStockForm(group.stockFormSummary)}</span> : null}

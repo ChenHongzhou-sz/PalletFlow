@@ -1,4 +1,4 @@
-import { createHashRouter } from "react-router-dom";
+import { Navigate, createHashRouter } from "react-router-dom";
 import { AppShell } from "@/app/layouts/AppShell";
 import { CycleCountPage } from "@/features/cycle-count/CycleCountPage";
 import { HomePage } from "@/features/home/HomePage";
@@ -44,6 +44,10 @@ export const router = createHashRouter([
       {
         path: "counts",
         element: <CycleCountPage />,
+      },
+      {
+        path: "cycle-count",
+        element: <Navigate to={appRoutes.cycleCount} replace />,
       },
       {
         path: "logs",
