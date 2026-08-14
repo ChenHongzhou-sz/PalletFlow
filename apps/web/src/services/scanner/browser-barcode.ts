@@ -10,6 +10,7 @@ const NATIVE_BARCODE_FORMATS = [
   "upc_e",
   "qr_code",
   "data_matrix",
+  "pdf417",
 ] as const;
 
 const COMMON_LINEAR_BARCODE_FORMATS = [
@@ -22,6 +23,7 @@ const COMMON_LINEAR_BARCODE_FORMATS = [
   "itf",
   "upc_a",
   "upc_e",
+  "pdf417",
 ] as const;
 
 type NativeBarcode = {
@@ -63,6 +65,15 @@ type Html5QrcodeDecodedResult = {
   };
 };
 
+type Html5QrcodeImageScanResult = {
+  decodedText: string;
+  result?: {
+    format?: {
+      formatName?: string;
+    };
+  };
+};
+
 type Html5QrcodeInstance = {
   start: (
     cameraConfig: Html5QrcodeCameraConfig,
@@ -72,19 +83,15 @@ type Html5QrcodeInstance = {
   ) => Promise<unknown>;
   stop: () => Promise<void>;
   clear: () => void;
+  scanFileV2: (imageFile: File, showImage?: boolean) => Promise<Html5QrcodeImageScanResult>;
 };
 
-type Html5QrcodeConstructor = new (
-  elementId: string,
-  config?:
-    | boolean
-    | {
-        verbose?: boolean;
-        useBarCodeDetectorIfSupported?: boolean;
-      },
-) => Html5QrcodeInstance;
-
 type Html5QrcodeModule = typeof import("html5-qrcode");
+
+type BarcodeImageVariant = {
+  file: File;
+  label: string;
+};
 
 declare global {
   interface Window {
@@ -102,16 +109,21 @@ export interface BarcodeScannerSession {
   stop: () => Promise<void>;
 }
 
+export interface BarcodeImageDecodeResult {
+  engine: "native" | "html5-qrcode";
+  results: BarcodeScanResult[];
+}
+
 interface StartBarcodeScannerOptions {
   container: HTMLElement;
   onDetected: (result: BarcodeScanResult) => void;
 }
 
-let html5QrcodeLoader: Promise<Html5QrcodeConstructor> | null = null;
+let html5QrcodeLoader: Promise<Html5QrcodeModule> | null = null;
 
 function getBarcodeScanBox(viewfinderWidth: number, viewfinderHeight: number) {
-  const width = Math.max(260, Math.min(Math.floor(viewfinderWidth * 0.9), 440));
-  const height = Math.max(132, Math.min(Math.floor(viewfinderHeight * 0.28), 176));
+  const width = Math.max(280, Math.min(Math.floor(viewfinderWidth * 0.92), 520));
+  const height = Math.max(260, Math.min(Math.floor(viewfinderHeight * 0.72), 560));
 
   return {
     width,
@@ -154,6 +166,22 @@ export async function startCameraBarcodeScanner({
   return startNativeBarcodeScanner(container, onDetected, nativeCapabilities.fallbackFormats);
 }
 
+export async function decodeBarcodeImageFile(
+  file: File,
+  onStatus?: (message: string) => void,
+): Promise<BarcodeImageDecodeResult> {
+  const nativeCapabilities = await resolveNativeBarcodeCapabilities();
+
+  if (nativeCapabilities.fallbackFormats.length) {
+    const nativeResult = await tryDecodeBarcodeImageWithNative(file, nativeCapabilities.fallbackFormats, onStatus);
+    if (nativeResult.results.length) {
+      return nativeResult;
+    }
+  }
+
+  return decodeBarcodeImageWithHtml5Qrcode(file, onStatus);
+}
+
 function shouldFallbackToNativeScanner(error: unknown) {
   if (!(error instanceof Error)) {
     return true;
@@ -180,10 +208,10 @@ async function startNativeBarcodeScanner(
         ideal: "environment",
       },
       width: {
-        ideal: 1280,
+        ideal: 1920,
       },
       height: {
-        ideal: 720,
+        ideal: 1080,
       },
       frameRate: {
         ideal: 24,
@@ -244,16 +272,12 @@ async function startNativeBarcodeScanner(
       detecting = true;
 
       try {
-        const results = await detector.detect(video);
-        const matched = results.find((item) => typeof item.rawValue === "string" && item.rawValue.trim().length > 0);
+        const results = normalizeBarcodeResults(await detector.detect(video));
+        const matched = results.find((item) => item.text.length > 0);
 
-        if (matched?.rawValue) {
-          const text = matched.rawValue.trim();
+        if (matched) {
           await stop();
-          onDetected({
-            text,
-            format: matched.format ?? null,
-          });
+          onDetected(matched);
           return;
         }
       } catch {
@@ -285,17 +309,18 @@ async function startHtml5QrcodeScanner(
     useNativeBarcodeDetector: boolean;
   },
 ): Promise<BarcodeScannerSession> {
-  const Html5Qrcode = await loadHtml5Qrcode();
+  const module = await loadHtml5QrcodeModule();
   const mountNode = document.createElement("div");
   const elementId = `pf-scanner-${Math.random().toString(36).slice(2, 10)}`;
   mountNode.id = elementId;
   mountNode.className = "h-full w-full";
   container.replaceChildren(mountNode);
 
-  const scanner = new Html5Qrcode(elementId, {
+  const scanner: Html5QrcodeInstance = new module.Html5Qrcode(elementId, {
     verbose: false,
     useBarCodeDetectorIfSupported: options.useNativeBarcodeDetector,
-  });
+    formatsToSupport: getHtml5SupportedFormats(module),
+  }) as Html5QrcodeInstance;
 
   let stopped = false;
 
@@ -327,19 +352,19 @@ async function startHtml5QrcodeScanner(
         facingMode: "environment",
       },
       {
-        fps: 18,
+        fps: 12,
         qrbox: getBarcodeScanBox,
-        aspectRatio: 1.333334,
-        disableFlip: false,
+        aspectRatio: 0.75,
+        disableFlip: true,
         videoConstraints: {
           facingMode: {
             ideal: "environment",
           },
           width: {
-            ideal: 1280,
+            ideal: 1920,
           },
           height: {
-            ideal: 720,
+            ideal: 1080,
           },
           frameRate: {
             ideal: 24,
@@ -373,6 +398,112 @@ async function startHtml5QrcodeScanner(
     engine: "html5-qrcode",
     stop,
   };
+}
+
+async function tryDecodeBarcodeImageWithNative(
+  file: File,
+  formats: readonly string[],
+  onStatus?: (message: string) => void,
+): Promise<BarcodeImageDecodeResult> {
+  const BarcodeDetector = window.BarcodeDetector;
+  if (!BarcodeDetector) {
+    return {
+      engine: "native",
+      results: [],
+    };
+  }
+
+  const detector = new BarcodeDetector({
+    formats,
+  });
+
+  const image = await loadImageFromFile(file);
+  const variants = buildImageCanvasVariants(image);
+
+  for (const variant of variants) {
+    onStatus?.(`正在尝试${variant.label}条码解码...`);
+    const bitmap = await createImageBitmap(variant.canvas);
+
+    try {
+      const results = normalizeBarcodeResults(await detector.detect(bitmap));
+      if (results.length) {
+        return {
+          engine: "native",
+          results,
+        };
+      }
+    } catch {
+      // Continue trying rotated variants.
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  return {
+    engine: "native",
+    results: [],
+  };
+}
+
+async function decodeBarcodeImageWithHtml5Qrcode(
+  file: File,
+  onStatus?: (message: string) => void,
+): Promise<BarcodeImageDecodeResult> {
+  const module = await loadHtml5QrcodeModule();
+  const host = document.createElement("div");
+  const hostId = `pf-image-scanner-${Math.random().toString(36).slice(2, 10)}`;
+  host.id = hostId;
+  host.className = "hidden";
+  document.body.appendChild(host);
+
+  const scanner: Html5QrcodeInstance = new module.Html5Qrcode(hostId, {
+    verbose: false,
+    useBarCodeDetectorIfSupported: true,
+    formatsToSupport: getHtml5SupportedFormats(module),
+  }) as Html5QrcodeInstance;
+
+  try {
+    const variants = await buildImageFileVariants(file);
+
+    for (const variant of variants) {
+      onStatus?.(`正在尝试${variant.label}条码解码...`);
+
+      try {
+        const result = await scanner.scanFileV2(variant.file, false);
+        const text = result.decodedText.trim();
+
+        if (text) {
+          return {
+            engine: "html5-qrcode",
+            results: [
+              {
+                text,
+                format: result.result?.format?.formatName ?? null,
+              },
+            ],
+          };
+        }
+      } catch {
+        // Continue trying rotated variants.
+      } finally {
+        try {
+          scanner.clear();
+        } catch {
+          // Ignore clear errors between image attempts.
+        }
+      }
+    }
+  } finally {
+    try {
+      scanner.clear();
+    } catch {
+      // Ignore clear errors during cleanup.
+    }
+
+    host.remove();
+  }
+
+  throw new Error("这张图片里没有识别到条码。请尽量只拍目标条码，或把手机横过来再扫。");
 }
 
 async function resolveNativeBarcodeCapabilities() {
@@ -422,14 +553,29 @@ async function getSupportedNativeBarcodeFormats() {
   }
 }
 
-async function loadHtml5Qrcode() {
+function getHtml5SupportedFormats(module: Html5QrcodeModule) {
+  return [
+    module.Html5QrcodeSupportedFormats.CODE_128,
+    module.Html5QrcodeSupportedFormats.CODE_39,
+    module.Html5QrcodeSupportedFormats.CODE_93,
+    module.Html5QrcodeSupportedFormats.CODABAR,
+    module.Html5QrcodeSupportedFormats.ITF,
+    module.Html5QrcodeSupportedFormats.EAN_13,
+    module.Html5QrcodeSupportedFormats.EAN_8,
+    module.Html5QrcodeSupportedFormats.PDF_417,
+    module.Html5QrcodeSupportedFormats.UPC_A,
+    module.Html5QrcodeSupportedFormats.UPC_E,
+    module.Html5QrcodeSupportedFormats.QR_CODE,
+    module.Html5QrcodeSupportedFormats.DATA_MATRIX,
+  ];
+}
+
+async function loadHtml5QrcodeModule() {
   if (!html5QrcodeLoader) {
-    // Bundle the fallback scanner with the app so scan still works even
-    // when the device cannot reach a third-party CDN.
     html5QrcodeLoader = import("html5-qrcode")
       .then((module: Html5QrcodeModule) => {
         if (typeof module.Html5Qrcode === "function") {
-          return module.Html5Qrcode as Html5QrcodeConstructor;
+          return module;
         }
 
         html5QrcodeLoader = null;
@@ -446,6 +592,133 @@ async function loadHtml5Qrcode() {
   }
 
   return html5QrcodeLoader;
+}
+
+function normalizeBarcodeResults(results: NativeBarcode[] | BarcodeScanResult[]) {
+  const normalized = results
+    .map((item) => {
+      if ("text" in item) {
+        return {
+          text: item.text.trim(),
+          format: item.format ?? null,
+        };
+      }
+
+      return {
+        text: item.rawValue?.trim() ?? "",
+        format: item.format ?? null,
+      };
+    })
+    .filter((item) => item.text.length > 0);
+
+  const deduped = new Map<string, BarcodeScanResult>();
+
+  for (const item of normalized) {
+    const key = `${item.text}::${item.format ?? ""}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, item);
+    }
+  }
+
+  return Array.from(deduped.values());
+}
+
+async function buildImageFileVariants(file: File) {
+  const image = await loadImageFromFile(file);
+  const canvasVariants = buildImageCanvasVariants(image);
+  const variants: BarcodeImageVariant[] = [{ file, label: "原图" }];
+
+  for (const variant of canvasVariants) {
+    if (variant.angle === 0) {
+      continue;
+    }
+
+    variants.push({
+      file: await canvasToFile(variant.canvas, file, variant.angle),
+      label: variant.label,
+    });
+  }
+
+  return variants;
+}
+
+function buildImageCanvasVariants(image: HTMLImageElement) {
+  return [
+    { angle: 0, label: "原图", canvas: renderRotatedCanvas(image, 0) },
+    { angle: 90, label: "顺时针旋转 90°", canvas: renderRotatedCanvas(image, 90) },
+    { angle: 270, label: "逆时针旋转 90°", canvas: renderRotatedCanvas(image, 270) },
+    { angle: 180, label: "旋转 180°", canvas: renderRotatedCanvas(image, 180) },
+  ];
+}
+
+function renderRotatedCanvas(image: HTMLImageElement, angle: 0 | 90 | 180 | 270) {
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const canvas = document.createElement("canvas");
+  const rotateRightAngle = angle === 90 || angle === 270;
+  canvas.width = rotateRightAngle ? sourceHeight : sourceWidth;
+  canvas.height = rotateRightAngle ? sourceWidth : sourceHeight;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("当前浏览器无法处理图片。");
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (angle === 90) {
+    context.translate(canvas.width, 0);
+    context.rotate(Math.PI / 2);
+  } else if (angle === 180) {
+    context.translate(canvas.width, canvas.height);
+    context.rotate(Math.PI);
+  } else if (angle === 270) {
+    context.translate(0, canvas.height);
+    context.rotate(-Math.PI / 2);
+  }
+
+  context.drawImage(image, 0, 0, sourceWidth, sourceHeight);
+  return canvas;
+}
+
+async function canvasToFile(canvas: HTMLCanvasElement, file: File, angle: number) {
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((nextBlob) => {
+      if (nextBlob) {
+        resolve(nextBlob);
+        return;
+      }
+
+      reject(new Error("图片转换失败，请换一张图片再试。"));
+    }, file.type || "image/jpeg");
+  });
+
+  const dotIndex = file.name.lastIndexOf(".");
+  const baseName = dotIndex > 0 ? file.name.slice(0, dotIndex) : file.name;
+  const extension = dotIndex > 0 ? file.name.slice(dotIndex) : ".jpg";
+
+  return new File([blob], `${baseName}-rot${angle}${extension}`, {
+    type: blob.type || file.type || "image/jpeg",
+    lastModified: file.lastModified,
+  });
+}
+
+function loadImageFromFile(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("图片加载失败，请换一张更清晰的条码图片。"));
+    };
+    image.src = objectUrl;
+  });
 }
 
 function normalizeScannerStartError(error: unknown) {

@@ -3,11 +3,13 @@ import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   canUseNativeBarcodeDetector,
   canUseCameraScanner,
+  decodeBarcodeImageFile,
   getCameraScannerUnsupportedMessage,
   startCameraBarcodeScanner,
+  type BarcodeImageDecodeResult,
+  type BarcodeScanResult,
   type BarcodeScannerSession,
 } from "@/services/scanner/browser-barcode";
-import { canUseNativeTextDetector, recognizeTextFromImage, type OcrCandidate } from "@/services/scanner/image-ocr";
 
 interface CameraScannerDialogProps {
   open: boolean;
@@ -15,10 +17,64 @@ interface CameraScannerDialogProps {
   onDetected: (value: string) => void;
 }
 
-type ScannerMode = "camera" | "image";
+type ScannerMode = "camera" | "gallery";
 
 function resolveReasonMessage(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
+}
+
+function formatBarcodeKind(format: string | null) {
+  if (!format) {
+    return "未标明格式";
+  }
+
+  if (/qr/iu.test(format)) {
+    return "二维码";
+  }
+
+  if (/data_matrix|pdf417/iu.test(format)) {
+    return format.toUpperCase();
+  }
+
+  return `条形码 ${format.toUpperCase()}`;
+}
+
+function scoreBarcodeResult(result: BarcodeScanResult) {
+  const text = result.text.trim().toUpperCase();
+  let score = 0;
+
+  if (/[A-Z]/u.test(text) && /\d/u.test(text)) {
+    score += 100;
+  }
+
+  if (/^[A-Z0-9\-_/().]+$/u.test(text)) {
+    score += 28;
+  }
+
+  if (text.length >= 8 && text.length <= 28) {
+    score += 24;
+  }
+
+  if (/^\d+$/u.test(text)) {
+    score -= 26;
+  }
+
+  if (/qr/iu.test(result.format ?? "")) {
+    score -= 18;
+  }
+
+  return score;
+}
+
+function sortBarcodeResults(results: BarcodeScanResult[]) {
+  return [...results].sort((left, right) => {
+    const scoreGap = scoreBarcodeResult(right) - scoreBarcodeResult(left);
+    if (scoreGap !== 0) {
+      return scoreGap;
+    }
+
+    return right.text.length - left.text.length;
+  });
 }
 
 export function CameraScannerDialog({ open, onClose, onDetected }: CameraScannerDialogProps) {
@@ -34,14 +90,13 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraEngineName, setCameraEngineName] = useState<string | null>(null);
 
-  const [ocrBusy, setOcrBusy] = useState(false);
-  const [ocrStatusText, setOcrStatusText] = useState("请选择一张清晰的物料标签图片，系统会尝试提取料号或规格文本。");
-  const [ocrError, setOcrError] = useState<string | null>(null);
-  const [ocrCandidates, setOcrCandidates] = useState<OcrCandidate[]>([]);
-  const [ocrRawText, setOcrRawText] = useState("");
-  const [ocrImageUrl, setOcrImageUrl] = useState<string | null>(null);
-  const [ocrImageName, setOcrImageName] = useState("");
-  const [ocrEngine, setOcrEngine] = useState<"native-text-detector" | "tesseract" | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageStatusText, setImageStatusText] = useState("可以直接拍一张箱标，系统会只解里面的条码，不再做文字识别。");
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [imageResults, setImageResults] = useState<BarcodeScanResult[]>([]);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageName, setImageName] = useState("");
+  const [imageEngine, setImageEngine] = useState<BarcodeImageDecodeResult["engine"] | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -115,7 +170,7 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
     const timer = window.setTimeout(() => {
       setCameraStatusText((current) =>
         current === "正在识别条码，识别成功后会自动回填。"
-          ? "正在识别中，如无反应请让条码尽量铺满长条框，再前后微调 5 到 10 厘米。"
+          ? "如果是像你箱标那样竖着的一维码，请把手机横过来，让黑线横着穿过取景框。"
           : current,
       );
     }, 2200);
@@ -131,14 +186,13 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
       setCameraError(null);
       setCameraEngineName(null);
       setCameraStatusText("正在启动摄像头...");
-      setOcrBusy(false);
-      setOcrStatusText("请选择一张清晰的物料标签图片，系统会尝试提取料号或规格文本。");
-      setOcrError(null);
-      setOcrCandidates([]);
-      setOcrRawText("");
-      setOcrImageName("");
-      setOcrEngine(null);
-      setOcrImageUrl((current) => {
+      setImageBusy(false);
+      setImageStatusText("可以直接拍一张箱标，系统会只解里面的条码，不再做文字识别。");
+      setImageError(null);
+      setImageResults([]);
+      setImageName("");
+      setImageEngine(null);
+      setImageUrl((current) => {
         if (current) {
           URL.revokeObjectURL(current);
         }
@@ -150,11 +204,11 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
 
   useEffect(() => {
     return () => {
-      if (ocrImageUrl) {
-        URL.revokeObjectURL(ocrImageUrl);
+      if (imageUrl) {
+        URL.revokeObjectURL(imageUrl);
       }
     };
-  }, [ocrImageUrl]);
+  }, [imageUrl]);
 
   useEffect(() => {
     if (!open) {
@@ -192,15 +246,14 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
       return;
     }
 
-    setOcrBusy(true);
-    setOcrError(null);
-    setOcrCandidates([]);
-    setOcrRawText("");
-    setOcrEngine(null);
-    setOcrStatusText("正在准备图片...");
-    setOcrImageName(file.name);
+    setImageBusy(true);
+    setImageError(null);
+    setImageResults([]);
+    setImageEngine(null);
+    setImageStatusText("正在准备条码图片...");
+    setImageName(file.name);
 
-    setOcrImageUrl((current) => {
+    setImageUrl((current) => {
       if (current) {
         URL.revokeObjectURL(current);
       }
@@ -209,25 +262,25 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
     });
 
     try {
-      const result = await recognizeTextFromImage(file, setOcrStatusText);
-      setOcrEngine(result.engine);
-      setOcrCandidates(result.candidates);
-      setOcrRawText(result.rawText);
-      setOcrStatusText(
-        result.candidates.length === 1
-          ? "已识别到 1 个候选内容，点一下即可回填。"
-          : `已识别到 ${result.candidates.length} 个候选内容，请点选最接近的一项。`,
+      const result = await decodeBarcodeImageFile(file, setImageStatusText);
+      const rankedResults = sortBarcodeResults(result.results);
+      setImageEngine(result.engine);
+      setImageResults(rankedResults);
+      setImageStatusText(
+        rankedResults.length === 1
+          ? "已识别到 1 个条码，点一下即可回填。"
+          : `已识别到 ${rankedResults.length} 个条码，请选择要回填的那个。`,
       );
     } catch (reason) {
-      setOcrError(resolveReasonMessage(reason, "图片识别失败，请换一张更清晰的标签图片。"));
-      setOcrStatusText("识图暂时不可用。");
+      setImageError(resolveReasonMessage(reason, "图片条码识别失败，请换一张更清晰的条码图片。"));
+      setImageStatusText("相册识码暂时不可用。");
     } finally {
-      setOcrBusy(false);
+      setImageBusy(false);
     }
   }
 
-  function handleSelectCandidate(candidate: OcrCandidate) {
-    onDetected(candidate.queryText.trim());
+  function handleSelectResult(result: BarcodeScanResult) {
+    onDetected(result.text.trim());
     onClose();
   }
 
@@ -248,12 +301,12 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="pf-pill bg-ink text-white">{mode === "camera" ? "摄像头扫码" : "图片识字"}</p>
+            <p className="pf-pill bg-ink text-white">{mode === "camera" ? "摄像头扫码" : "相册识码"}</p>
             <h2 id={titleId} className="mt-3 font-display text-2xl font-semibold text-ink">
-              扫码或识图录入
+              扫码录入
             </h2>
             <p id={descriptionId} className="mt-2 text-sm leading-6 text-slate-600">
-              条码好扫时继续用摄像头；标签难扫时可以直接上传图片，自动提取料号或规格文本。
+              先用摄像头扫；如果像你这张箱标一样是一维条码又细又竖，就切到“相册识码”，直接解图片里的条码。
             </p>
           </div>
 
@@ -272,10 +325,10 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
           </button>
           <button
             type="button"
-            onClick={() => setMode("image")}
-            className={`rounded-full px-4 py-3 text-sm font-semibold transition ${mode === "image" ? "bg-ink text-white" : "text-slate-600"}`}
+            onClick={() => setMode("gallery")}
+            className={`rounded-full px-4 py-3 text-sm font-semibold transition ${mode === "gallery" ? "bg-ink text-white" : "text-slate-600"}`}
           >
-            上传图片识字
+            相册识码
           </button>
         </div>
 
@@ -286,12 +339,15 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
                 <div ref={previewRef} className="pf-scanner-preview h-full w-full" />
                 {!cameraError ? (
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <div className="h-36 w-[88%] rounded-[1.75rem] border-2 border-dashed border-white/80 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.18)] sm:h-40" />
+                    <div className="relative h-[72%] w-[88%] rounded-[1.75rem] border-2 border-dashed border-white/80 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.14)]">
+                      <div className="absolute inset-x-6 top-1/2 border-t border-white/70" />
+                      <div className="absolute inset-y-6 left-1/2 border-l border-white/35" />
+                    </div>
                   </div>
                 ) : null}
               </div>
             </div>
-            <p className="mt-3 text-xs leading-6 text-slate-500">商品条形码和箱标都尽量横着放进长条框里，让左右两端完整露出来，识别会更稳。</p>
+            <p className="mt-3 text-xs leading-6 text-slate-500">一维码建议让整段黑线完整进入框内。若条码是竖着的，请把手机横过来再扫。</p>
 
             <div className="mt-4 rounded-[1.5rem] bg-slate-100 px-4 py-3 text-sm text-slate-600">
               <p>{cameraStatusText}</p>
@@ -299,10 +355,14 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
                 {cameraEngineName === "native"
                   ? "当前浏览器正在使用原生条码识别。"
                   : canUseNativeBarcodeDetector()
-                    ? "当前浏览器也支持原生识别，但页面优先启用兼容性更高的摄像头扫码。"
+                    ? "当前浏览器也支持原生识别，但页面优先启用兼容性更高的一维码扫描。"
                     : "当前浏览器会自动切换到兼容扫码组件，首次打开可能会稍慢 1 到 2 秒。"}
               </p>
             </div>
+
+            <button type="button" onClick={() => setMode("gallery")} className="mt-4 pf-button-secondary w-full">
+              这种箱标难扫？改用相册识码
+            </button>
 
             {cameraError ? (
               <div className="mt-4 rounded-[1.5rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -316,55 +376,49 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
 
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <button type="button" onClick={() => fileInputRef.current?.click()} className="pf-button-primary flex-1">
-                {ocrBusy ? "正在识图..." : ocrImageUrl ? "更换图片继续识别" : "选择标签图片"}
+                {imageBusy ? "正在识码..." : imageUrl ? "更换图片继续识码" : "选择箱标图片"}
               </button>
-              {ocrCandidates.length ? (
-                <button
-                  type="button"
-                  onClick={() => handleSelectCandidate(ocrCandidates[0])}
-                  className="pf-button-secondary flex-1"
-                >
-                  直接填入第 1 个结果
+              {imageResults.length ? (
+                <button type="button" onClick={() => handleSelectResult(imageResults[0])} className="pf-button-secondary flex-1">
+                  直接填入推荐结果
                 </button>
               ) : null}
             </div>
 
             <div className="mt-4 overflow-hidden rounded-[1.75rem] bg-slate-100">
-              {ocrImageUrl ? (
-                <img src={ocrImageUrl} alt={ocrImageName || "待识别标签"} className="aspect-[4/3] w-full object-contain bg-white" />
+              {imageUrl ? (
+                <img src={imageUrl} alt={imageName || "待识别条码"} className="aspect-[4/3] w-full object-contain bg-white" />
               ) : (
                 <div className="flex aspect-[4/3] items-center justify-center px-6 text-center text-sm leading-7 text-slate-500">
-                  建议只拍标签上的料号那一行，或从相册选择已经拍好的物料标签图片。
+                  可以从相册选一张箱标，系统会自动尝试原图、顺时针 90 度和逆时针 90 度再解条码。
                 </div>
               )}
             </div>
 
             <div className="mt-4 rounded-[1.5rem] bg-slate-100 px-4 py-3 text-sm text-slate-600">
-              <p>{ocrStatusText}</p>
+              <p>{imageStatusText}</p>
               <p className="mt-2 text-xs text-slate-500">
-                {ocrEngine === "native-text-detector"
-                  ? "当前浏览器正在使用原生图片文字识别。"
-                  : canUseNativeTextDetector()
-                    ? "当前浏览器支持原生图片识字，若识别不稳定会自动回退到 OCR 引擎。"
-                    : "首次使用 OCR 可能需要下载识别包，请保持网络畅通并尽量选择清晰图片。"}
+                {imageEngine === "native"
+                  ? "当前浏览器正在使用原生图片条码识别。"
+                  : imageEngine === "html5-qrcode"
+                    ? "当前浏览器已切换到兼容条码解码组件。"
+                    : "这里只识条码和二维码，不再识别文字。"}
               </p>
             </div>
 
-            {ocrCandidates.length ? (
+            {imageResults.length ? (
               <div className="mt-4 space-y-2">
-                {ocrCandidates.map((candidate, index) => (
+                {imageResults.map((result, index) => (
                   <button
-                    key={`${candidate.queryText}-${index}`}
+                    key={`${result.text}-${index}`}
                     type="button"
-                    onClick={() => handleSelectCandidate(candidate)}
+                    onClick={() => handleSelectResult(result)}
                     className={`block w-full rounded-[1.5rem] border p-4 text-left ${index === 0 ? "border-ember bg-ember/[0.12]" : "border-slate-200 bg-white"}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="break-all font-display text-xl font-semibold text-ink">{candidate.queryText}</p>
-                        {candidate.displayText !== candidate.queryText ? (
-                          <p className="mt-2 text-xs leading-6 text-slate-500">原始识别: {candidate.displayText}</p>
-                        ) : null}
+                        <p className="break-all font-display text-xl font-semibold text-ink">{result.text}</p>
+                        <p className="mt-2 text-xs leading-6 text-slate-500">{formatBarcodeKind(result.format)}</p>
                       </div>
                       {index === 0 ? <span className="pf-pill bg-ink text-white">推荐</span> : null}
                     </div>
@@ -373,16 +427,9 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
               </div>
             ) : null}
 
-            {ocrRawText ? (
-              <details className="mt-4 rounded-[1.5rem] bg-slate-100/90 p-4">
-                <summary className="cursor-pointer list-none text-sm font-semibold text-slate-600">查看原始识别文本</summary>
-                <pre className="mt-3 whitespace-pre-wrap break-all text-xs leading-6 text-slate-600">{ocrRawText}</pre>
-              </details>
-            ) : null}
-
-            {ocrError ? (
+            {imageError ? (
               <div className="mt-4 rounded-[1.5rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                {ocrError}
+                {imageError}
               </div>
             ) : null}
           </>
