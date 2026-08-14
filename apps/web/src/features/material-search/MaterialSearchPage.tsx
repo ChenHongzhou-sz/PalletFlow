@@ -10,6 +10,7 @@ import { resolveErrorMessage } from "@/lib/api/errors";
 import { formatDateTime, formatProductionMonth } from "@/lib/formatters/date";
 import { formatLocationType } from "@/lib/formatters/location";
 import { formatQuantity } from "@/lib/formatters/number";
+import { aggregateMaterialDistributionRows } from "@/lib/inventory/inventory-aggregation";
 import { buildMaterialSpecChips } from "@/lib/materials/material-spec";
 import {
   readRecentMaterialSearches,
@@ -48,6 +49,10 @@ function formatMatchedByLabel(value: string) {
 }
 
 function formatStockForm(value: string | null | undefined) {
+  if (value === "MIXED") {
+    return "混合";
+  }
+
   if (value === "OPEN") {
     return "散料";
   }
@@ -173,7 +178,8 @@ export function MaterialSearchPage() {
 
   const selected = filteredResults.find((item) => item.materialCode === selectedMaterialCode) ?? null;
   const selectedChips = selected ? buildSpecChips(selected) : [];
-  const visibleDistribution = showAllDistribution ? distribution : distribution.slice(0, 6);
+  const aggregatedDistribution = useMemo(() => aggregateMaterialDistributionRows(distribution), [distribution]);
+  const visibleDistribution = showAllDistribution ? aggregatedDistribution : aggregatedDistribution.slice(0, 6);
 
   useEffect(() => {
     setShowAllDistribution(false);
@@ -353,31 +359,34 @@ export function MaterialSearchPage() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="font-display text-xl font-semibold text-ink">库存分布</h3>
-            <p className="mt-1 text-xs text-slate-500">按生产日期升序，方便现场先看 FIFO 再定位散料。</p>
+            <p className="mt-1 text-xs text-slate-500">按库位 + 生产年月汇总显示，仍保持 FIFO 的生产年月顺序。</p>
           </div>
-          <span className="text-xs text-slate-500">{distribution.length} 条明细</span>
+          <span className="text-xs text-slate-500">{aggregatedDistribution.length} 条汇总</span>
         </div>
 
-        {distribution.length ? (
+        {aggregatedDistribution.length ? (
           <div className="mt-4 space-y-3">
             {visibleDistribution.map((row) => (
-              <div key={row.batchId} className="rounded-[1.6rem] bg-slate-100/90 p-4">
+              <div key={row.groupKey} className="rounded-[1.6rem] bg-slate-100/90 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-display text-xl font-semibold text-ink">{row.locationCode}</p>
-                      <span className={`pf-pill ${row.stockForm === "OPEN" ? "bg-amber-100 text-amber-800" : "bg-white text-slate-600"}`}>
-                        {formatStockForm(row.stockForm)}
-                      </span>
+                      {row.stockFormSummary ? (
+                        <span className={`pf-pill ${row.stockFormSummary === "OPEN" ? "bg-amber-100 text-amber-800" : "bg-white text-slate-600"}`}>
+                          {formatStockForm(row.stockFormSummary)}
+                        </span>
+                      ) : null}
                     </div>
                     <p className="mt-1 text-sm text-slate-600">
                       {row.locationType ? `${formatLocationType(row.locationType)} / ` : ""}
                       生产月 {formatProductionMonth(row.productionDate)}
-                      {row.dateCode ? ` / DC ${row.dateCode}` : ""}
-                      {row.lotNo ? ` / 批次 ${row.lotNo}` : ""}
+                      {row.dateCodeSummary ? ` / DC ${row.dateCodeSummary}` : ""}
+                      {row.lotSummary ? ` / 批号 ${row.lotSummary}` : ""}
+                      {` / 已合并 ${row.mergedEntryCount} 次入库`}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-                      {row.boxBarcode ? <span>外箱条码 {row.boxBarcode}</span> : null}
+                      {row.boxBarcodeSummary ? <span>箱码 {row.boxBarcodeSummary}</span> : null}
                       {row.receivedAt ? <span>入库 {formatDateTime(row.receivedAt)}</span> : null}
                     </div>
                   </div>
@@ -386,15 +395,15 @@ export function MaterialSearchPage() {
               </div>
             ))}
 
-            {distribution.length > visibleDistribution.length ? (
+            {aggregatedDistribution.length > visibleDistribution.length ? (
               <button type="button" onClick={() => setShowAllDistribution(true)} className="pf-button-secondary w-full">
-                展开剩余 {distribution.length - visibleDistribution.length} 条
+                展开剩余 {aggregatedDistribution.length - visibleDistribution.length} 条
               </button>
             ) : null}
           </div>
         ) : (
           <div className="mt-4">
-            <EmptyState title="当前没有可展示的库存" description="这个物料已经在主数据里，但目前没有有效库存批次，后续入库后会自动显示在这里。" />
+            <EmptyState title="当前没有可展示的库存" description="这个物料已经在主数据里，但目前没有可汇总的有效库存，后续入库后会自动显示在这里。" />
           </div>
         )}
       </div>

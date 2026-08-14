@@ -14,7 +14,7 @@ export function InventoryExportPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [lastExportedAt, setLastExportedAt] = useState<string | null>(null);
-  const [lastBatchCount, setLastBatchCount] = useState<number>(0);
+  const [lastSummaryRowCount, setLastSummaryRowCount] = useState<number>(0);
   const [lastLocationCount, setLastLocationCount] = useState<number>(0);
   const [lastMaterialCount, setLastMaterialCount] = useState<number>(0);
   const [lastTotalQuantity, setLastTotalQuantity] = useState<number>(0);
@@ -29,11 +29,11 @@ export function InventoryExportPage() {
 
       if (!rows.length) {
         setLastExportedAt(null);
-        setLastBatchCount(0);
+        setLastSummaryRowCount(0);
         setLastLocationCount(0);
         setLastMaterialCount(0);
         setLastTotalQuantity(0);
-        setMessage("当前没有在库批次，暂时没有可导出的库存明细。");
+        setMessage("当前没有在库库存，暂时没有可导出的汇总明细。");
         return;
       }
 
@@ -41,11 +41,11 @@ export function InventoryExportPage() {
       await exportCurrentInventoryWorkbook(rows);
 
       setLastExportedAt(new Date().toISOString());
-      setLastBatchCount(summary.batchCount);
+      setLastSummaryRowCount(summary.summaryRowCount);
       setLastLocationCount(summary.locationCount);
       setLastMaterialCount(summary.materialCount);
       setLastTotalQuantity(summary.totalQuantity);
-      setMessage(`已导出 ${summary.batchCount} 条在库批次，覆盖 ${summary.locationCount} 个库位。`);
+      setMessage(`已导出 ${summary.summaryRowCount} 条汇总库存，覆盖 ${summary.locationCount} 个库位。`);
     } catch (reason) {
       setError(resolveErrorMessage(reason));
     } finally {
@@ -58,14 +58,14 @@ export function InventoryExportPage() {
       <PageHeader
         eyebrow="Inventory Export"
         title="数据导出"
-        description="一键导出当前所有库位的在库批次，给仓库、采购或管理层直接看库存分布。"
+        description="一键导出当前所有库位按“料号 + 生产年月”汇总后的库存，给仓库、采购或管理层直接看库存分布。"
       />
       <ConfigNotice />
 
       <section className="pf-panel space-y-5 p-5">
         <div className="rounded-[1.8rem] bg-slate-100/85 p-4 text-sm leading-7 text-slate-600">
-          导出的 Excel 会包含当前还在库的全部批次，字段包括仓库、库位号、库位名称、库位类型、物料型号、简称、描述、数量、
-          生产年月、批次号、外箱条码、入库时间和最后更新时间。
+          导出的 Excel 会按“库位号 + 物料型号 + 生产年月”汇总当前在库库存，字段包括仓库、库位号、库位名称、库位类型、
+          物料型号、简称、描述、数量、生产年月、汇总入库次数、批号汇总、箱码汇总、首次入库时间和最后更新时间。
         </div>
 
         <button type="button" onClick={handleExportCurrentInventory} disabled={exporting} className="pf-button-primary w-full">
@@ -79,7 +79,7 @@ export function InventoryExportPage() {
       {lastExportedAt ? (
         <>
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="在库批次" value={String(lastBatchCount)} tone="dark" />
+            <StatCard label="汇总库存行" value={String(lastSummaryRowCount)} tone="dark" />
             <StatCard label="库位数量" value={String(lastLocationCount)} />
             <StatCard label="物料种数" value={String(lastMaterialCount)} />
             <StatCard label="总数量" value={`${formatQuantity(lastTotalQuantity)} PCS`} tone="accent" />
@@ -92,7 +92,7 @@ export function InventoryExportPage() {
           </section>
         </>
       ) : (
-        <EmptyState title="还没开始导出" description="点上面的按钮，系统会直接从 Supabase 拉取当前在库批次并生成 Excel。" />
+        <EmptyState title="还没开始导出" description="点上面的按钮，系统会直接从 Supabase 拉取当前库存并按料号与生产年月汇总生成 Excel。" />
       )}
     </div>
   );

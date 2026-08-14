@@ -1,5 +1,6 @@
 import type { CurrentInventoryExportRow } from "@/types/domain";
 import { formatLocationType } from "@/lib/formatters/location";
+import { aggregateCurrentInventoryExportRows } from "@/lib/inventory/inventory-aggregation";
 
 function formatTimestampForFile(value: Date) {
   const year = value.getFullYear();
@@ -29,20 +30,21 @@ function formatDateTime(value: string) {
 
 export interface InventoryExportSummary {
   exportedAt: string;
-  batchCount: number;
+  summaryRowCount: number;
   locationCount: number;
   materialCount: number;
   totalQuantity: number;
 }
 
 export function buildInventoryExportSummary(rows: CurrentInventoryExportRow[]): InventoryExportSummary {
-  const locationCodes = new Set(rows.map((row) => `${row.warehouseCode}:${row.locationCode || row.palletCode}`));
-  const materialCodes = new Set(rows.map((row) => row.materialCode));
-  const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
+  const aggregatedRows = aggregateCurrentInventoryExportRows(rows);
+  const locationCodes = new Set(aggregatedRows.map((row) => `${row.warehouseCode}:${row.locationCode || row.palletCode}`));
+  const materialCodes = new Set(aggregatedRows.map((row) => row.materialCode));
+  const totalQuantity = aggregatedRows.reduce((sum, row) => sum + row.quantity, 0);
 
   return {
     exportedAt: formatDateTime(new Date().toISOString()),
-    batchCount: rows.length,
+    summaryRowCount: aggregatedRows.length,
     locationCount: locationCodes.size,
     materialCount: materialCodes.size,
     totalQuantity,
@@ -51,9 +53,10 @@ export function buildInventoryExportSummary(rows: CurrentInventoryExportRow[]): 
 
 export async function exportCurrentInventoryWorkbook(rows: CurrentInventoryExportRow[]) {
   const xlsx = await import("xlsx");
+  const aggregatedRows = aggregateCurrentInventoryExportRows(rows);
   const summary = buildInventoryExportSummary(rows);
 
-  const detailRows = rows.map((row) => ({
+  const detailRows = aggregatedRows.map((row) => ({
     仓库: row.warehouseCode,
     库位号: row.locationCode || row.palletCode,
     库位名称: row.locationName || row.palletArea || row.palletCode,
@@ -65,15 +68,16 @@ export async function exportCurrentInventoryWorkbook(rows: CurrentInventoryExpor
     规格: row.specification || "",
     数量: row.quantity,
     生产年月: row.productionDate.slice(0, 7),
-    批次号: row.lotNo || "",
-    外箱条码: row.boxBarcode || "",
-    入库时间: formatDateTime(row.inboundAt),
+    汇总入库次数: row.mergedEntryCount,
+    批号汇总: row.lotSummary || "",
+    箱码汇总: row.boxBarcodeSummary || "",
+    首次入库时间: formatDateTime(row.inboundAt),
     最后更新时间: formatDateTime(row.lastUpdatedAt),
   }));
 
   const summaryRows = [
     { 指标: "导出时间", 值: summary.exportedAt },
-    { 指标: "在库批次数", 值: summary.batchCount },
+    { 指标: "汇总库存行", 值: summary.summaryRowCount },
     { 指标: "在库库位数", 值: summary.locationCount },
     { 指标: "在库物料种数", 值: summary.materialCount },
     { 指标: "总数量", 值: summary.totalQuantity },
@@ -96,8 +100,9 @@ export async function exportCurrentInventoryWorkbook(rows: CurrentInventoryExpor
     { wch: 18 },
     { wch: 12 },
     { wch: 12 },
-    { wch: 18 },
-    { wch: 22 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 16 },
     { wch: 20 },
     { wch: 20 },
   ];
