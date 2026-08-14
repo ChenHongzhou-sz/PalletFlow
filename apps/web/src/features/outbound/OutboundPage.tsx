@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { ConfigNotice } from "@/components/feedback/ConfigNotice";
 import { EmptyState } from "@/components/feedback/EmptyState";
@@ -9,6 +9,7 @@ import { ScanActionButton } from "@/components/scanner/ScanActionButton";
 import { resolveErrorMessage } from "@/lib/api/errors";
 import { formatProductionMonth } from "@/lib/formatters/date";
 import { formatQuantity } from "@/lib/formatters/number";
+import { aggregateFifoSuggestionRows } from "@/lib/inventory/inventory-aggregation";
 import { confirmOutboundPick, getFifoSuggestions } from "@/services/inventory/inventory-service";
 import { searchMaterials } from "@/services/search/search-service";
 import type { FifoSuggestionRow, MaterialSearchItem } from "@/types/domain";
@@ -24,6 +25,7 @@ export function OutboundPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const aggregatedSuggestions = useMemo(() => aggregateFifoSuggestionRows(suggestions), [suggestions]);
 
   const selectedMaterial = materialOptions.find((item) => item.materialCode === selectedMaterialCode) ?? null;
   const currentStep: 1 | 2 | 3 = !selectedMaterial ? 1 : !requestedQuantity ? 2 : 3;
@@ -106,7 +108,7 @@ export function OutboundPage() {
     try {
       const result = await confirmOutboundPick(selectedMaterial.materialCode, Number(requestedQuantity), operatorName);
       const picked = result.reduce((sum, row) => sum + Number(row.picked_quantity ?? 0), 0);
-      setMessage(`已按 FIFO 出库 ${formatQuantity(picked)} PCS，共涉及 ${result.length} 个批次。`);
+      setMessage(`已按 FIFO 出库 ${formatQuantity(picked)} PCS，系统内部共扣减 ${result.length} 个底层批次。`);
       setRequestedQuantity("");
       setSuggestions([]);
     } catch (reason) {
@@ -118,7 +120,7 @@ export function OutboundPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="Outbound" title="出库" description="先找物料，再填需求数量，系统按生产年月自动给出 FIFO 库位扣减建议。" />
+      <PageHeader eyebrow="Outbound" title="出库" description="先找物料，再填需求数量，系统会把同生产月库存合并显示成一个批次，并按 FIFO 自动扣减。" />
       <ConfigNotice />
 
       <section className="pf-panel space-y-5 p-5">
@@ -171,18 +173,20 @@ export function OutboundPage() {
             </label>
           </div>
 
-          {suggestions.length > 0 ? (
+          {aggregatedSuggestions.length > 0 ? (
             <div className="space-y-3">
-              {suggestions.map((row) => (
-                <div key={row.batchId} className="rounded-[1.6rem] bg-slate-100/90 p-4">
+              {aggregatedSuggestions.map((row) => (
+                <div key={row.groupKey} className="rounded-[1.6rem] bg-slate-100/90 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-display text-xl font-semibold text-ink">{row.palletCode}</p>
-                      <p className="mt-1 text-sm text-slate-600">生产年月 {formatProductionMonth(row.productionDate)}</p>
+                      <p className="font-display text-xl font-semibold text-ink">合并批次 {formatProductionMonth(row.productionDate)}</p>
+                      <p className="mt-1 text-sm text-slate-600">同一物料、同一生产月已合并显示为一个批次</p>
                       <p className="mt-1 text-xs text-slate-500">
                         可用 {formatQuantity(row.availableQuantity)} PCS
-                        {row.lotNo ? ` · 批次 ${row.lotNo}` : ""}
+                        {row.palletCount > 0 ? ` · 覆盖库位 ${row.palletCount} 处` : ""}
+                        {row.lotSummary ? ` · ${row.lotSummary === "多批号" ? "批号已合并" : `批号 ${row.lotSummary}`}` : ""}
                       </p>
+                      <p className="mt-1 text-xs text-slate-500">库位 {row.palletSummary}</p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-2 text-sm font-semibold text-ink">
                       建议扣减 {formatQuantity(row.suggestedQuantity)}
@@ -196,7 +200,7 @@ export function OutboundPage() {
           {error ? <div className="rounded-3xl bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div> : null}
           {message ? <div className="rounded-3xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</div> : null}
 
-          <button type="submit" disabled={submitting || !suggestions.length} className="pf-button-primary w-full">
+          <button type="submit" disabled={submitting || !aggregatedSuggestions.length} className="pf-button-primary w-full">
             {submitting ? "正在出库..." : "确认按 FIFO 出库"}
           </button>
         </form>

@@ -1,6 +1,5 @@
 import type { CurrentInventoryExportRow } from "@/types/domain";
-import { formatLocationType } from "@/lib/formatters/location";
-import { aggregateCurrentInventoryExportRows } from "@/lib/inventory/inventory-aggregation";
+import { aggregateMaterialMonthInventoryExportRows } from "@/lib/inventory/inventory-aggregation";
 
 function formatTimestampForFile(value: Date) {
   const year = value.getFullYear();
@@ -37,8 +36,10 @@ export interface InventoryExportSummary {
 }
 
 export function buildInventoryExportSummary(rows: CurrentInventoryExportRow[]): InventoryExportSummary {
-  const aggregatedRows = aggregateCurrentInventoryExportRows(rows);
-  const locationCodes = new Set(aggregatedRows.map((row) => `${row.warehouseCode}:${row.locationCode || row.palletCode}`));
+  const aggregatedRows = aggregateMaterialMonthInventoryExportRows(rows);
+  const locationCodes = new Set(
+    rows.map((row) => `${row.warehouseCode}:${(row.locationCode || row.palletCode).trim().toUpperCase()}`),
+  );
   const materialCodes = new Set(aggregatedRows.map((row) => row.materialCode));
   const totalQuantity = aggregatedRows.reduce((sum, row) => sum + row.quantity, 0);
 
@@ -53,14 +54,11 @@ export function buildInventoryExportSummary(rows: CurrentInventoryExportRow[]): 
 
 export async function exportCurrentInventoryWorkbook(rows: CurrentInventoryExportRow[]) {
   const xlsx = await import("xlsx");
-  const aggregatedRows = aggregateCurrentInventoryExportRows(rows);
+  const aggregatedRows = aggregateMaterialMonthInventoryExportRows(rows);
   const summary = buildInventoryExportSummary(rows);
 
   const detailRows = aggregatedRows.map((row) => ({
     仓库: row.warehouseCode,
-    库位号: row.locationCode || row.palletCode,
-    库位名称: row.locationName || row.palletArea || row.palletCode,
-    库位类型: formatLocationType(row.locationType),
     物料型号: row.materialCode,
     物料简称: row.shortCode || "",
     描述: row.description || "",
@@ -68,6 +66,8 @@ export async function exportCurrentInventoryWorkbook(rows: CurrentInventoryExpor
     规格: row.specification || "",
     数量: row.quantity,
     生产年月: row.productionDate.slice(0, 7),
+    覆盖库位数: row.locationCount,
+    库位分布: row.locationSummary,
     汇总入库次数: row.mergedEntryCount,
     批号汇总: row.lotSummary || "",
     箱码汇总: row.boxBarcodeSummary || "",
@@ -90,9 +90,6 @@ export async function exportCurrentInventoryWorkbook(rows: CurrentInventoryExpor
   summarySheet["!cols"] = [{ wch: 16 }, { wch: 20 }];
   detailSheet["!cols"] = [
     { wch: 10 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 16 },
     { wch: 24 },
     { wch: 18 },
     { wch: 28 },
@@ -100,6 +97,8 @@ export async function exportCurrentInventoryWorkbook(rows: CurrentInventoryExpor
     { wch: 18 },
     { wch: 12 },
     { wch: 12 },
+    { wch: 10 },
+    { wch: 40 },
     { wch: 12 },
     { wch: 16 },
     { wch: 16 },

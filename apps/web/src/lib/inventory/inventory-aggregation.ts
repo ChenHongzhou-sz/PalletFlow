@@ -1,4 +1,4 @@
-import type { CurrentInventoryExportRow, MaterialDistributionRow, PalletInventoryRow } from "@/types/domain";
+import type { CurrentInventoryExportRow, FifoSuggestionRow, MaterialDistributionRow, PalletInventoryRow } from "@/types/domain";
 
 function normalizeToken(value: string | null | undefined) {
   return (value ?? "").trim().toUpperCase();
@@ -46,6 +46,23 @@ function pickLatestTimestamp(values: Array<string | null | undefined>) {
   return values
     .filter((value): value is string => Boolean(value))
     .sort((left, right) => right.localeCompare(left))[0] ?? null;
+}
+
+function summarizeLocationQuantities(rows: Array<{ locationCode: string; quantity: number }>) {
+  const locationMap = new Map<string, number>();
+
+  for (const row of rows) {
+    const locationCode = normalizeToken(row.locationCode);
+    if (!locationCode) {
+      continue;
+    }
+
+    locationMap.set(locationCode, (locationMap.get(locationCode) ?? 0) + row.quantity);
+  }
+
+  return Array.from(locationMap.entries())
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .map(([locationCode, quantity]) => `${locationCode}(${quantity})`);
 }
 
 export interface AggregatedPalletInventoryRow {
@@ -230,4 +247,136 @@ export function aggregateCurrentInventoryExportRows(rows: CurrentInventoryExport
 
     return left.productionDate.localeCompare(right.productionDate);
   });
+}
+
+export interface AggregatedMaterialMonthInventoryExportRow {
+  groupKey: string;
+  warehouseCode: string;
+  materialCode: string;
+  shortCode: string | null;
+  description: string | null;
+  category: string | null;
+  specification: string | null;
+  quantity: number;
+  initialQuantity: number;
+  productionDate: string;
+  mergedEntryCount: number;
+  locationCount: number;
+  locationSummary: string;
+  lotSummary: string | null;
+  boxBarcodeSummary: string | null;
+  inboundAt: string;
+  lastUpdatedAt: string;
+}
+
+export function aggregateMaterialMonthInventoryExportRows(rows: CurrentInventoryExportRow[]) {
+  const groups = new Map<string, AggregatedMaterialMonthInventoryExportRow>();
+  const locationRows = new Map<string, Array<{ locationCode: string; quantity: number }>>();
+
+  for (const row of rows) {
+    const groupKey = [normalizeToken(row.warehouseCode), normalizeToken(row.materialCode), normalizeToken(row.productionDate)].join("|");
+    const existing = groups.get(groupKey);
+    const locationCode = row.locationCode || row.palletCode;
+    const locations = locationRows.get(groupKey) ?? [];
+    locations.push({ locationCode, quantity: row.quantity });
+    locationRows.set(groupKey, locations);
+
+    if (existing) {
+      existing.quantity += row.quantity;
+      existing.initialQuantity += row.initialQuantity;
+      existing.mergedEntryCount += 1;
+      existing.locationCount = new Set(locations.map((item) => normalizeToken(item.locationCode))).size;
+      existing.locationSummary = summarizeLocationQuantities(locations).join(" / ");
+      existing.lotSummary = summarizeSingleOrMultiple([existing.lotSummary, row.lotNo], "多批号");
+      existing.boxBarcodeSummary = summarizeSingleOrMultiple([existing.boxBarcodeSummary, row.boxBarcode], "多箱码");
+      existing.inboundAt = pickEarliestTimestamp([existing.inboundAt, row.inboundAt]) ?? existing.inboundAt;
+      existing.lastUpdatedAt = pickLatestTimestamp([existing.lastUpdatedAt, row.lastUpdatedAt]) ?? existing.lastUpdatedAt;
+      continue;
+    }
+
+    groups.set(groupKey, {
+      groupKey,
+      warehouseCode: row.warehouseCode,
+      materialCode: row.materialCode,
+      shortCode: row.shortCode ?? null,
+      description: row.description ?? null,
+      category: row.category ?? null,
+      specification: row.specification ?? null,
+      quantity: row.quantity,
+      initialQuantity: row.initialQuantity,
+      productionDate: row.productionDate,
+      mergedEntryCount: 1,
+      locationCount: 1,
+      locationSummary: summarizeLocationQuantities(locations).join(" / "),
+      lotSummary: row.lotNo ?? null,
+      boxBarcodeSummary: row.boxBarcode ?? null,
+      inboundAt: row.inboundAt,
+      lastUpdatedAt: row.lastUpdatedAt,
+    });
+  }
+
+  return Array.from(groups.values()).sort((left, right) => {
+    const warehouseCompare = left.warehouseCode.localeCompare(right.warehouseCode);
+    if (warehouseCompare !== 0) {
+      return warehouseCompare;
+    }
+
+    const materialCompare = left.materialCode.localeCompare(right.materialCode);
+    if (materialCompare !== 0) {
+      return materialCompare;
+    }
+
+    return left.productionDate.localeCompare(right.productionDate);
+  });
+}
+
+export interface AggregatedFifoSuggestionRow {
+  groupKey: string;
+  productionDate: string;
+  availableQuantity: number;
+  suggestedQuantity: number;
+  mergedEntryCount: number;
+  palletCount: number;
+  palletSummary: string;
+  lotSummary: string | null;
+  boxBarcodeSummary: string | null;
+  sourceRows: FifoSuggestionRow[];
+}
+
+export function aggregateFifoSuggestionRows(rows: FifoSuggestionRow[]) {
+  const groups = new Map<string, AggregatedFifoSuggestionRow>();
+
+  for (const row of rows) {
+    const groupKey = normalizeToken(row.productionDate);
+    const existing = groups.get(groupKey);
+
+    if (existing) {
+      existing.availableQuantity += row.availableQuantity;
+      existing.suggestedQuantity += row.suggestedQuantity;
+      existing.mergedEntryCount += 1;
+      existing.lotSummary = summarizeSingleOrMultiple([existing.lotSummary, row.lotNo], "多批号");
+      existing.boxBarcodeSummary = summarizeSingleOrMultiple([existing.boxBarcodeSummary, row.boxBarcode], "多箱码");
+      existing.sourceRows.push(row);
+      existing.palletCount = new Set(existing.sourceRows.map((item) => normalizeToken(item.palletCode))).size;
+      existing.palletSummary = Array.from(new Set(existing.sourceRows.map((item) => normalizeToken(item.palletCode))))
+        .sort((left, right) => left.localeCompare(right))
+        .join(" / ");
+      continue;
+    }
+
+    groups.set(groupKey, {
+      groupKey,
+      productionDate: row.productionDate,
+      availableQuantity: row.availableQuantity,
+      suggestedQuantity: row.suggestedQuantity,
+      mergedEntryCount: 1,
+      palletCount: 1,
+      palletSummary: normalizeToken(row.palletCode),
+      lotSummary: row.lotNo ?? null,
+      boxBarcodeSummary: row.boxBarcode ?? null,
+      sourceRows: [row],
+    });
+  }
+
+  return Array.from(groups.values()).sort((left, right) => left.productionDate.localeCompare(right.productionDate));
 }
