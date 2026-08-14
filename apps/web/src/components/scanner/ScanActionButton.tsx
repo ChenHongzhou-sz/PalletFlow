@@ -11,7 +11,7 @@ export function ScanActionButton({ onScan }: ScanActionButtonProps) {
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className="pf-button-secondary shrink-0">
-        扫码
+        扫码/识图
       </button>
 
       <CameraScannerDialog
