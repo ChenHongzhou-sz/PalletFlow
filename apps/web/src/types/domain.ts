@@ -56,6 +56,7 @@ export interface PalletInventoryRow {
   description: string | null;
   quantity: number;
   productionDate: string;
+  receivedAt?: string | null;
   lotNo: string | null;
   boxBarcode: string | null;
   dateCode: string | null;

@@ -63,6 +63,8 @@ export interface AggregatedPalletInventoryRow {
   stockFormSummary: string | null;
   lotSummary: string | null;
   boxBarcodeSummary: string | null;
+  dateCodeSummary: string | null;
+  sourceRows: PalletInventoryRow[];
 }
 
 export function aggregatePalletInventoryRows(rows: PalletInventoryRow[]) {
@@ -78,6 +80,8 @@ export function aggregatePalletInventoryRows(rows: PalletInventoryRow[]) {
       existing.stockFormSummary = summarizeStockForm([existing.stockFormSummary, row.stockForm]);
       existing.lotSummary = summarizeSingleOrMultiple([existing.lotSummary, row.lotNo], "多批号");
       existing.boxBarcodeSummary = summarizeSingleOrMultiple([existing.boxBarcodeSummary, row.boxBarcode], "多箱码");
+      existing.dateCodeSummary = summarizeSingleOrMultiple([existing.dateCodeSummary, row.dateCode], "多编码");
+      existing.sourceRows.push(row);
       continue;
     }
 
@@ -96,6 +100,8 @@ export function aggregatePalletInventoryRows(rows: PalletInventoryRow[]) {
       stockFormSummary: row.stockForm ?? null,
       lotSummary: row.lotNo ?? null,
       boxBarcodeSummary: row.boxBarcode ?? null,
+      dateCodeSummary: row.dateCode ?? null,
+      sourceRows: [row],
     });
   }
 

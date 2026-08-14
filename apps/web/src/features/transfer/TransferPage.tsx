@@ -10,6 +10,8 @@ import { resolveErrorMessage } from "@/lib/api/errors";
 import { formatProductionMonth } from "@/lib/formatters/date";
 import { formatLocationType } from "@/lib/formatters/location";
 import { formatQuantity } from "@/lib/formatters/number";
+import { allocateTransferQuantity } from "@/lib/inventory/inventory-allocation";
+import { aggregatePalletInventoryRows } from "@/lib/inventory/inventory-aggregation";
 import { transferInventoryBatch, transferLocationInventory } from "@/services/inventory/inventory-service";
 import { getPalletInventory } from "@/services/search/search-service";
 import type { PalletInventoryRow } from "@/types/domain";
@@ -20,6 +22,8 @@ function formatStockForm(value: string | null | undefined) {
       return "散料";
     case "SEALED":
       return "整箱";
+    case "MIXED":
+      return "混合";
     default:
       return value ?? "未标记";
   }
@@ -90,40 +94,42 @@ export function TransferPage() {
   const [moveError, setMoveError] = useState<string | null>(null);
   const [moveMessage, setMoveMessage] = useState<string | null>(null);
   const moveInventory = useLocationInventory(moveSourceCode);
-  const moveTotalQuantity = moveInventory.rows.reduce((sum, row) => sum + row.quantity, 0);
+  const moveAggregatedRows = useMemo(() => aggregatePalletInventoryRows(moveInventory.rows), [moveInventory.rows]);
+  const moveTotalQuantity = moveAggregatedRows.reduce((sum, row) => sum + row.quantity, 0);
 
   const [batchSourceCode, setBatchSourceCode] = useState("");
   const [batchTargetCode, setBatchTargetCode] = useState("");
-  const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [selectedGroupKey, setSelectedGroupKey] = useState("");
   const [batchQuantity, setBatchQuantity] = useState("");
   const [batchNote, setBatchNote] = useState("");
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [batchMessage, setBatchMessage] = useState<string | null>(null);
   const batchInventory = useLocationInventory(batchSourceCode);
+  const batchAggregatedRows = useMemo(() => aggregatePalletInventoryRows(batchInventory.rows), [batchInventory.rows]);
 
-  const selectedBatch = useMemo(
-    () => batchInventory.rows.find((row) => row.batchId === selectedBatchId) ?? null,
-    [batchInventory.rows, selectedBatchId],
+  const selectedGroup = useMemo(
+    () => batchAggregatedRows.find((row) => row.groupKey === selectedGroupKey) ?? null,
+    [batchAggregatedRows, selectedGroupKey],
   );
 
   useEffect(() => {
-    if (selectedBatchId && !batchInventory.rows.some((row) => row.batchId === selectedBatchId)) {
-      setSelectedBatchId("");
+    if (selectedGroupKey && !batchAggregatedRows.some((row) => row.groupKey === selectedGroupKey)) {
+      setSelectedGroupKey("");
       setBatchQuantity("");
     }
-  }, [batchInventory.rows, selectedBatchId]);
+  }, [batchAggregatedRows, selectedGroupKey]);
 
   useEffect(() => {
-    if (!selectedBatch) {
+    if (!selectedGroup) {
       return;
     }
 
     const numericQuantity = Number(batchQuantity);
-    if (numericQuantity > selectedBatch.quantity) {
-      setBatchQuantity(String(selectedBatch.quantity));
+    if (numericQuantity > selectedGroup.quantity) {
+      setBatchQuantity(String(selectedGroup.quantity));
     }
-  }, [batchQuantity, selectedBatch]);
+  }, [batchQuantity, selectedGroup]);
 
   async function handleMoveSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -162,12 +168,13 @@ export function TransferPage() {
   async function handleBatchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!selectedBatch || !batchInventory.normalizedCode) {
-      setBatchError("请先选中要转移的批次。");
+    if (!selectedGroup || !batchInventory.normalizedCode) {
+      setBatchError("请先选中要转移的汇总项。");
       return;
     }
 
-    if (!batchTargetCode.trim()) {
+    const normalizedTargetCode = batchTargetCode.trim().toUpperCase();
+    if (!normalizedTargetCode) {
       setBatchError("请输入目标库位。");
       return;
     }
@@ -178,8 +185,8 @@ export function TransferPage() {
       return;
     }
 
-    if (numericQuantity > selectedBatch.quantity) {
-      setBatchError(`转移数量不能超过当前批次的 ${formatQuantity(selectedBatch.quantity)} PCS。`);
+    if (numericQuantity > selectedGroup.quantity) {
+      setBatchError(`转移数量不能超过当前汇总项的 ${formatQuantity(selectedGroup.quantity)} PCS。`);
       return;
     }
 
@@ -188,28 +195,38 @@ export function TransferPage() {
     setBatchMessage(null);
 
     try {
-      const [result] = await transferInventoryBatch({
-        sourceLocationCode: batchInventory.normalizedCode,
-        batchId: selectedBatch.batchId,
-        targetLocationCode: batchTargetCode,
-        quantity: numericQuantity,
-        operatorName,
-        note: batchNote,
-      });
-      if (!result) {
-        throw new Error("转移已提交，但没有返回批次摘要。请到日志里确认结果。");
+      const allocations = allocateTransferQuantity(selectedGroup.sourceRows, numericQuantity);
+      const results = [];
+
+      for (const allocation of allocations) {
+        const [result] = await transferInventoryBatch({
+          sourceLocationCode: batchInventory.normalizedCode,
+          batchId: allocation.batchId,
+          targetLocationCode: normalizedTargetCode,
+          quantity: allocation.quantity,
+          operatorName,
+          note: batchNote,
+        });
+
+        if (!result) {
+          throw new Error("转移已提交，但没有返回批次摘要。请到日志里确认结果。");
+        }
+
+        results.push(result);
       }
 
+      const movedTotal = results.reduce((sum, row) => sum + row.movedQuantity, 0);
+      const remainingGroupQuantity = Math.max(0, selectedGroup.quantity - movedTotal);
       setBatchMessage(
-        `已将 ${selectedBatch.materialCode} 的 ${formatQuantity(result.movedQuantity)} PCS 从 ${result.sourceLocationCode} 转到 ${result.targetLocationCode}。`,
+        `已将 ${selectedGroup.materialCode} 的 ${formatQuantity(movedTotal)} PCS 从 ${batchInventory.normalizedCode} 转到 ${normalizedTargetCode}，共涉及 ${results.length} 个底层批次。`,
       );
       setBatchTargetCode("");
       setBatchNote("");
-      if (result.sourceRemainingQuantity > 0) {
-        setSelectedBatchId(result.sourceBatchId);
-        setBatchQuantity(String(result.sourceRemainingQuantity));
+      if (remainingGroupQuantity > 0) {
+        setSelectedGroupKey(selectedGroup.groupKey);
+        setBatchQuantity(String(remainingGroupQuantity));
       } else {
-        setSelectedBatchId("");
+        setSelectedGroupKey("");
         setBatchQuantity("");
       }
       batchInventory.refresh();
@@ -221,17 +238,17 @@ export function TransferPage() {
   }
 
   const batchSelectionList =
-    batchInventory.rows.length > 0 ? (
+    batchAggregatedRows.length > 0 ? (
       <div className="space-y-3">
-        {batchInventory.rows.map((row) => {
-          const isActive = row.batchId === selectedBatchId;
+        {batchAggregatedRows.map((row) => {
+          const isActive = row.groupKey === selectedGroupKey;
 
           return (
             <button
-              key={row.batchId}
+              key={row.groupKey}
               type="button"
               onClick={() => {
-                setSelectedBatchId(row.batchId);
+                setSelectedGroupKey(row.groupKey);
                 setBatchQuantity(String(row.quantity));
                 setBatchError(null);
                 setBatchMessage(null);
@@ -246,16 +263,17 @@ export function TransferPage() {
                   <p className="mt-1 text-sm text-slate-600">{row.materialCode}</p>
                   <p className="mt-2 text-xs text-slate-500">
                     {row.locationType ? `${formatLocationType(row.locationType)} · ` : ""}生产年月 {formatProductionMonth(row.productionDate)}
-                    {row.dateCode ? ` · DC ${row.dateCode}` : ""}
-                    {row.lotNo ? ` · 批次 ${row.lotNo}` : ""}
+                    {row.dateCodeSummary ? ` · DC ${row.dateCodeSummary}` : ""}
+                    {row.mergedEntryCount > 1 ? ` · 已合并 ${row.mergedEntryCount} 次入库` : ""}
                   </p>
                 </div>
                 <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-ink">{formatQuantity(row.quantity)} PCS</span>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                <span className="pf-pill bg-white text-slate-600">{formatStockForm(row.stockForm)}</span>
-                {row.boxBarcode ? <span className="pf-pill bg-white text-slate-600">有箱码</span> : null}
+                <span className="pf-pill bg-white text-slate-600">{formatStockForm(row.stockFormSummary)}</span>
+                {row.lotSummary ? <span className="pf-pill bg-white text-slate-600">{row.lotSummary === "多批号" ? "批号已汇总" : `批号 ${row.lotSummary}`}</span> : null}
+                {row.boxBarcodeSummary ? <span className="pf-pill bg-white text-slate-600">{row.boxBarcodeSummary === "多箱码" ? "箱码已汇总" : "有箱码"}</span> : null}
                 {isActive ? <span className="pf-pill bg-ink text-white">已选中</span> : null}
               </div>
             </button>
@@ -285,7 +303,7 @@ export function TransferPage() {
         label="移库方式"
         options={[
           { value: "location", label: "整库位" },
-          { value: "batch", label: "按批次" },
+          { value: "batch", label: "按汇总项" },
         ]}
         value={transferMode}
         onChange={setTransferMode}
@@ -295,7 +313,7 @@ export function TransferPage() {
         <section className="pf-panel space-y-5 p-5">
           <div>
             <h2 className="font-display text-2xl font-semibold text-ink">整库位转移</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">适合整板换位。系统会保留原批次和 FIFO 顺序，只把整库位当前所有在库批次移动到新的卡板库位。</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">适合整板换位。界面会先按“同料号 + 同生产月”汇总预览，但系统仍会保留原底层批次和 FIFO 顺序去执行移库。</p>
           </div>
 
           <form className="space-y-4" onSubmit={handleMoveSubmit}>
@@ -326,22 +344,27 @@ export function TransferPage() {
 
             {moveInventory.rows.length > 0 ? (
               <>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-4">
                   <StatCard label="源库位" value={moveInventory.normalizedCode} tone="dark" />
-                  <StatCard label="在库批次" value={String(moveInventory.rows.length)} />
+                  <StatCard label="底层批次" value={String(moveInventory.rows.length)} />
+                  <StatCard label="汇总项" value={String(moveAggregatedRows.length)} />
                   <StatCard label="总数量" value={`${formatQuantity(moveTotalQuantity)} PCS`} tone="accent" />
                 </div>
 
                 <details className="rounded-[1.8rem] bg-slate-100/90 p-4">
-                  <summary className="cursor-pointer list-none text-sm font-semibold text-slate-600">查看将一起移动的批次</summary>
+                  <summary className="cursor-pointer list-none text-sm font-semibold text-slate-600">查看将一起移动的汇总项</summary>
                   <div className="mt-3 space-y-2">
-                    {moveInventory.rows.slice(0, 6).map((row) => (
-                      <div key={row.batchId} className="flex items-center justify-between gap-3 text-sm text-slate-600">
-                        <span>{row.shortCode || row.materialCode}</span>
+                    {moveAggregatedRows.slice(0, 6).map((row) => (
+                      <div key={row.groupKey} className="flex items-center justify-between gap-3 text-sm text-slate-600">
+                        <span>
+                          {row.shortCode || row.materialCode}
+                          <span className="ml-2 text-xs text-slate-500">生产月 {formatProductionMonth(row.productionDate)}</span>
+                          {row.mergedEntryCount > 1 ? <span className="ml-2 text-xs text-slate-500">已合并 {row.mergedEntryCount} 次入库</span> : null}
+                        </span>
                         <span>{formatQuantity(row.quantity)} PCS</span>
                       </div>
                     ))}
-                    {moveInventory.rows.length > 6 ? <p className="pt-1 text-xs text-slate-500">其余 {moveInventory.rows.length - 6} 个批次也会一起移动。</p> : null}
+                    {moveAggregatedRows.length > 6 ? <p className="pt-1 text-xs text-slate-500">其余 {moveAggregatedRows.length - 6} 条汇总项也会一起移动。</p> : null}
                   </div>
                 </details>
               </>
@@ -356,14 +379,14 @@ export function TransferPage() {
           </form>
 
           {!moveInventory.loading && moveInventory.normalizedCode.length >= 2 && moveInventory.rows.length === 0 && !moveInventory.error ? (
-            <EmptyState title="这个源库位当前没有在库批次" description="整库位转移只会移动当前还在库的批次。可以换一个源库位，或切到“按批次”处理。" />
+            <EmptyState title="这个源库位当前没有在库批次" description="整库位转移只会移动当前还在库的库存。可以换一个源库位，或切到“按汇总项”处理。" />
           ) : null}
         </section>
       ) : (
         <section className="pf-panel space-y-5 p-5">
           <div>
-            <h2 className="font-display text-2xl font-semibold text-ink">按批次 / 部分数量转移</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">适合把某个物料从卡板挪到另一张卡板，或者拆一部分转去散料货架。部分转移后，系统会自动把拆开的那部分按散料逻辑记录。</p>
+            <h2 className="font-display text-2xl font-semibold text-ink">按汇总项 / 部分数量转移</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">适合把某个物料从卡板挪到另一张卡板，或者拆一部分转去散料货架。界面按“同料号 + 同生产月”合并显示，提交时系统会自动拆回对应底层批次执行。</p>
           </div>
 
           <PalletCodeField
@@ -371,19 +394,19 @@ export function TransferPage() {
             value={batchSourceCode}
             placeholder="例如 P01、S01、S01-01"
             onChange={setBatchSourceCode}
-            helperText="先选源库位，再从下面的批次列表中点选要转移的那一条。"
+            helperText="先选源库位，再从下面的汇总列表中点选要转移的那一条。"
           />
 
           {batchInventory.loading ? <div className="rounded-3xl bg-slate-100 px-4 py-3 text-sm text-slate-600">正在读取可转移批次...</div> : null}
           {batchInventory.error ? <div className="rounded-3xl bg-red-50 px-4 py-3 text-sm text-red-800">{batchInventory.error}</div> : null}
 
-          {selectedBatch ? (
+          {selectedGroup ? (
             <>
               <form className="space-y-4 rounded-[1.8rem] bg-slate-100/90 p-4" onSubmit={handleBatchSubmit}>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <StatCard label="已选物料" value={selectedBatch.shortCode || selectedBatch.materialCode} tone="dark" />
-                  <StatCard label="当前数量" value={`${formatQuantity(selectedBatch.quantity)} PCS`} />
-                  <StatCard label="库存形态" value={formatStockForm(selectedBatch.stockForm)} tone="accent" />
+                  <StatCard label="已选物料" value={selectedGroup.shortCode || selectedGroup.materialCode} tone="dark" />
+                  <StatCard label="当前数量" value={`${formatQuantity(selectedGroup.quantity)} PCS`} />
+                  <StatCard label="库存形态" value={formatStockForm(selectedGroup.stockFormSummary)} tone="accent" />
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -396,7 +419,7 @@ export function TransferPage() {
                       step="1"
                       value={batchQuantity}
                       onChange={(event) => setBatchQuantity(event.target.value)}
-                      placeholder={`最多 ${formatQuantity(selectedBatch.quantity)}`}
+                      placeholder={`最多 ${formatQuantity(selectedGroup.quantity)}`}
                     />
                   </label>
 
@@ -424,7 +447,7 @@ export function TransferPage() {
               </form>
 
               <details className="rounded-[1.8rem] bg-slate-100/90 p-4">
-                <summary className="cursor-pointer list-none text-sm font-semibold text-slate-600">更换批次</summary>
+                <summary className="cursor-pointer list-none text-sm font-semibold text-slate-600">更换汇总项</summary>
                 <div className="mt-3">{batchSelectionList}</div>
               </details>
             </>
@@ -433,7 +456,7 @@ export function TransferPage() {
           )}
 
           {!batchInventory.loading && batchInventory.normalizedCode.length >= 2 && batchInventory.rows.length === 0 && !batchInventory.error ? (
-            <EmptyState title="这个源库位没有可转移批次" description="可以换一个源库位试试；如果你只是想整板换位，请切到“整库位”处理。" />
+            <EmptyState title="这个源库位没有可转移库存" description="可以换一个源库位试试；如果你只是想整板换位，请切到“整库位”处理。" />
           ) : null}
         </section>
       )}

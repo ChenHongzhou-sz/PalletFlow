@@ -43,6 +43,7 @@ type CurrentInventoryBatchRow = {
   description: string | null;
   quantity: number;
   production_date: string;
+  received_at: string | null;
   lot_no: string | null;
   box_barcode: string | null;
   date_code: string | null;
@@ -195,9 +196,10 @@ export async function getPalletInventory(palletCode: string) {
 
   const { data, error } = await db
     .from("v_current_inventory_batches")
-    .select("batch_id, location_code, location_name, location_type, material_code, short_code, description, quantity, production_date, lot_no, box_barcode, date_code, stock_form")
+    .select("batch_id, location_code, location_name, location_type, material_code, short_code, description, quantity, production_date, received_at, lot_no, box_barcode, date_code, stock_form")
     .eq("location_code", normalized)
     .order("production_date", { ascending: true })
+    .order("received_at", { ascending: true })
     .order("material_code", { ascending: true });
 
   if (error) {
@@ -215,6 +217,7 @@ export async function getPalletInventory(palletCode: string) {
     description: row.description,
     quantity: Number(row.quantity ?? 0),
     productionDate: row.production_date,
+    receivedAt: row.received_at ?? null,
     lotNo: row.lot_no,
     boxBarcode: row.box_barcode,
     dateCode: row.date_code ?? null,

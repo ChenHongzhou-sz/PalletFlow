@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ConfigNotice } from "@/components/feedback/ConfigNotice";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { StatCard } from "@/components/feedback/StatCard";
@@ -8,6 +8,8 @@ import { SegmentedSwitch } from "@/components/mobile/SegmentedSwitch";
 import { resolveErrorMessage } from "@/lib/api/errors";
 import { formatProductionMonth } from "@/lib/formatters/date";
 import { formatQuantity } from "@/lib/formatters/number";
+import { distributeCountedQuantityAcrossRows } from "@/lib/inventory/inventory-allocation";
+import { aggregatePalletInventoryRows } from "@/lib/inventory/inventory-aggregation";
 import { completeCycleCount } from "@/services/inventory/inventory-service";
 import { getPalletInventory } from "@/services/search/search-service";
 import type { CycleCountInputRow, PalletInventoryRow } from "@/types/domain";
@@ -17,7 +19,7 @@ export function CycleCountPage() {
   const [loadedPalletCode, setLoadedPalletCode] = useState<string | null>(null);
   const [rows, setRows] = useState<PalletInventoryRow[]>([]);
   const [countedMap, setCountedMap] = useState<Record<string, string>>({});
-  const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [selectedGroupKey, setSelectedGroupKey] = useState("");
   const [mobilePanel, setMobilePanel] = useState<"setup" | "count">("setup");
   const [showOnlyVariance, setShowOnlyVariance] = useState(false);
   const [operatorName, setOperatorName] = useState("");
@@ -25,12 +27,13 @@ export function CycleCountPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const aggregatedRows = useMemo(() => aggregatePalletInventoryRows(rows), [rows]);
 
   function clearLoadedRows() {
     setRows([]);
     setCountedMap({});
     setLoadedPalletCode(null);
-    setSelectedBatchId("");
+    setSelectedGroupKey("");
     setShowOnlyVariance(false);
   }
 
@@ -62,10 +65,11 @@ export function CycleCountPage() {
 
     try {
       const inventoryRows = await getPalletInventory(normalized);
+      const aggregatedInventoryRows = aggregatePalletInventoryRows(inventoryRows);
       setRows(inventoryRows);
-      setCountedMap(Object.fromEntries(inventoryRows.map((row) => [row.batchId, String(row.quantity)])));
+      setCountedMap(Object.fromEntries(aggregatedInventoryRows.map((row) => [row.groupKey, String(row.quantity)])));
       setLoadedPalletCode(normalized);
-      setSelectedBatchId(inventoryRows[0]?.batchId ?? "");
+      setSelectedGroupKey(aggregatedInventoryRows[0]?.groupKey ?? "");
       setShowOnlyVariance(false);
       setMobilePanel("count");
     } catch (reason) {
@@ -77,15 +81,14 @@ export function CycleCountPage() {
   }
 
   async function handleSubmit() {
-    if (!rows.length) {
+    if (!aggregatedRows.length) {
       return;
     }
 
     const normalized = palletCode.trim().toUpperCase();
-    const items: CycleCountInputRow[] = rows.map((row) => ({
-      batchId: row.batchId,
-      countedQuantity: Number(countedMap[row.batchId] ?? row.quantity),
-    }));
+    const items: CycleCountInputRow[] = aggregatedRows.flatMap((row) =>
+      distributeCountedQuantityAcrossRows(row.sourceRows, Number(countedMap[row.groupKey] ?? row.quantity)),
+    );
 
     setSubmitting(true);
     setError(null);
@@ -94,7 +97,7 @@ export function CycleCountPage() {
     try {
       const result = await completeCycleCount(normalized, items, operatorName);
       const changedLines = result.filter((row) => Number(row.variance_quantity ?? 0) !== 0).length;
-      setMessage(`盘点已保存。共处理 ${rows.length} 个批次，产生 ${changedLines} 条差异调整。`);
+      setMessage(`盘点已保存。共处理 ${aggregatedRows.length} 条汇总库存，写入 ${changedLines} 条底层差异调整。`);
     } catch (reason) {
       setError(resolveErrorMessage(reason));
     } finally {
@@ -102,18 +105,18 @@ export function CycleCountPage() {
     }
   }
 
-  const varianceCount = rows.filter((row) => Number(countedMap[row.batchId] ?? row.quantity) !== row.quantity).length;
-  const totalSystemQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
+  const varianceCount = aggregatedRows.filter((row) => Number(countedMap[row.groupKey] ?? row.quantity) !== row.quantity).length;
+  const totalSystemQuantity = aggregatedRows.reduce((sum, row) => sum + row.quantity, 0);
   const visibleRows = showOnlyVariance
-    ? rows.filter((row) => Number(countedMap[row.batchId] ?? row.quantity) !== row.quantity)
-    : rows;
+    ? aggregatedRows.filter((row) => Number(countedMap[row.groupKey] ?? row.quantity) !== row.quantity)
+    : aggregatedRows;
 
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Cycle Count"
         title="盘点"
-        description="先选库位，再改实际数量并保存差异。"
+        description="先选库位，再按“同料号 + 同生产月”填写实际数量并保存差异。"
       />
       <ConfigNotice />
 
@@ -153,7 +156,7 @@ export function CycleCountPage() {
             label="手机视图"
             options={[
               { value: "setup", label: "库位" },
-              { value: "count", label: `明细 (${rows.length})` },
+              { value: "count", label: `汇总 (${aggregatedRows.length})` },
             ]}
             value={mobilePanel}
             onChange={setMobilePanel}
@@ -162,13 +165,13 @@ export function CycleCountPage() {
       ) : null}
 
       {!rows.length ? (
-        <EmptyState title="先选择一个库位开始盘点" description="系统会按当前库位上的批次逐行给出系统数量，你只需要输入实际数量即可。" />
+        <EmptyState title="先选择一个库位开始盘点" description="系统会先按当前库位里的同料号与同生产月汇总显示，你只需要输入每条汇总库存的实际数量即可。" />
       ) : (
         <div className={`space-y-5 ${mobilePanel === "count" ? "block lg:block" : "hidden lg:block"}`}>
           <section className="pf-panel space-y-4 p-5">
             <div className="grid gap-3 sm:grid-cols-4">
               <StatCard label="库位号" value={loadedPalletCode || palletCode.trim().toUpperCase()} tone="dark" />
-              <StatCard label="在库批次" value={String(rows.length)} />
+              <StatCard label="汇总项" value={String(aggregatedRows.length)} />
               <StatCard label="系统总数" value={`${formatQuantity(totalSystemQuantity)} PCS`} />
               <StatCard label="差异条数" value={String(varianceCount)} tone={varianceCount > 0 ? "accent" : "default"} />
             </div>
@@ -179,7 +182,7 @@ export function CycleCountPage() {
                 onClick={() => setShowOnlyVariance(false)}
                 className={`pf-pill ${showOnlyVariance ? "bg-slate-100 text-slate-600" : "bg-ink text-white"}`}
               >
-                全部批次
+                全部汇总项
               </button>
               <button
                 type="button"
@@ -203,21 +206,25 @@ export function CycleCountPage() {
           ) : (
             <section className="space-y-3">
               {visibleRows.map((row) => {
-                const countedQuantity = Number(countedMap[row.batchId] ?? row.quantity);
+                const countedQuantity = Number(countedMap[row.groupKey] ?? row.quantity);
                 const variance = countedQuantity - row.quantity;
-                const isActive = row.batchId === selectedBatchId;
+                const isActive = row.groupKey === selectedGroupKey;
 
                 return (
-                  <div key={row.batchId} className="pf-panel overflow-hidden">
+                  <div key={row.groupKey} className="pf-panel overflow-hidden">
                     <button
                       type="button"
-                      onClick={() => setSelectedBatchId(row.batchId)}
+                      onClick={() => setSelectedGroupKey(row.groupKey)}
                       className="flex w-full items-start justify-between gap-3 p-4 text-left"
                     >
                       <div className="min-w-0">
                         <p className="font-display text-xl font-semibold text-ink">{row.shortCode || row.materialCode}</p>
                         <p className="mt-1 text-sm text-slate-600">{row.materialCode}</p>
-                        <p className="mt-2 text-xs text-slate-500">生产年月 {formatProductionMonth(row.productionDate)}</p>
+                        <p className="mt-2 text-xs text-slate-500">
+                          生产年月 {formatProductionMonth(row.productionDate)}
+                          {row.dateCodeSummary ? ` · DC ${row.dateCodeSummary}` : ""}
+                          {row.mergedEntryCount > 1 ? ` · 已合并 ${row.mergedEntryCount} 次入库` : ""}
+                        </p>
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-xs text-slate-500">系统 {formatQuantity(row.quantity)}</p>
@@ -238,11 +245,11 @@ export function CycleCountPage() {
                             type="number"
                             min="0"
                             step="1"
-                            value={countedMap[row.batchId] ?? String(row.quantity)}
+                            value={countedMap[row.groupKey] ?? String(row.quantity)}
                             onChange={(event) =>
                               setCountedMap((current) => ({
                                 ...current,
-                                [row.batchId]: event.target.value,
+                                [row.groupKey]: event.target.value,
                               }))
                             }
                           />
