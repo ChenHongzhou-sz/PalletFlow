@@ -14,8 +14,10 @@ const NATIVE_BARCODE_FORMATS = [
 ] as const;
 
 const CAMERA_SCAN_INTERVAL_MS = 80;
-const CAMERA_SCAN_BAND_WIDTH_RATIO = 0.94;
-const CAMERA_SCAN_BAND_HEIGHT_RATIO = 0.34;
+const CAMERA_VISIBLE_FRAME_MAX_SIDE = 1280;
+const CAMERA_SCAN_BAND_WIDTH_RATIO = 0.92;
+const CAMERA_SCAN_BAND_HEIGHT_RATIO = 0.42;
+const CAMERA_SCAN_LOOSE_BAND_HEIGHT_RATIO = 0.62;
 
 type NativeBarcode = {
   rawValue?: string;
@@ -38,6 +40,13 @@ type ZxingModule = typeof import("html5-qrcode/third_party/zxing-js.umd");
 type CanvasVariant = {
   canvas: HTMLCanvasElement;
   label: string;
+};
+
+type ZxingResultLike = {
+  text?: string;
+  format?: unknown;
+  getText?: () => string;
+  getBarcodeFormat?: () => unknown;
 };
 
 declare global {
@@ -92,26 +101,7 @@ export async function startCameraBarcodeScanner({
   const nativeDetector = createNativeBarcodeDetector(nativeFormats);
   const zxingReader = createZxingReader(zxing);
 
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: false,
-    video: {
-      facingMode: {
-        ideal: "environment",
-      },
-      width: {
-        ideal: 1920,
-        min: 640,
-      },
-      height: {
-        ideal: 1080,
-        min: 480,
-      },
-      frameRate: {
-        ideal: 30,
-        max: 30,
-      },
-    },
-  });
+  const stream = await openPreferredCameraStream();
 
   const video = document.createElement("video");
   video.autoplay = true;
@@ -119,6 +109,8 @@ export async function startCameraBarcodeScanner({
   video.playsInline = true;
   video.className = "h-full w-full object-cover";
   video.setAttribute("aria-label", "Camera preview");
+  video.setAttribute("playsinline", "true");
+  video.setAttribute("webkit-playsinline", "true");
   video.srcObject = stream;
 
   container.replaceChildren(video);
@@ -134,6 +126,7 @@ export async function startCameraBarcodeScanner({
 
   const workingCanvas = document.createElement("canvas");
   const cropCanvas = document.createElement("canvas");
+  const looseCropCanvas = document.createElement("canvas");
   const rotatedCanvas = document.createElement("canvas");
 
   let stopped = false;
@@ -175,6 +168,7 @@ export async function startCameraBarcodeScanner({
           zxingReader,
           workingCanvas,
           cropCanvas,
+          looseCropCanvas,
           rotatedCanvas,
         });
 
@@ -216,13 +210,10 @@ export async function decodeBarcodeImageFile(
     onStatus?.(`正在尝试${variant.label}条码解码...`);
 
     if (nativeDetector) {
-      const bitmap = await createImageBitmap(variant.canvas);
       try {
-        results.push(...normalizeBarcodeResults(await nativeDetector.detect(bitmap)));
+        results.push(...normalizeBarcodeResults(await nativeDetector.detect(variant.canvas)));
       } catch {
         // Keep trying the ZXing decoder below.
-      } finally {
-        bitmap.close();
       }
     }
 
@@ -251,6 +242,7 @@ async function scanVideoFrame({
   zxingReader,
   workingCanvas,
   cropCanvas,
+  looseCropCanvas,
   rotatedCanvas,
 }: {
   video: HTMLVideoElement;
@@ -259,41 +251,121 @@ async function scanVideoFrame({
   zxingReader: unknown;
   workingCanvas: HTMLCanvasElement;
   cropCanvas: HTMLCanvasElement;
+  looseCropCanvas: HTMLCanvasElement;
   rotatedCanvas: HTMLCanvasElement;
 }) {
-  drawVideoToCanvas(video, workingCanvas);
+  drawVisibleVideoFrameToCanvas(video, workingCanvas);
 
-  const scanBandCanvas = renderCameraScanBand(workingCanvas, cropCanvas);
+  const scanBandCanvas = renderCameraScanBand(workingCanvas, cropCanvas, CAMERA_SCAN_BAND_HEIGHT_RATIO);
+  const looseScanBandCanvas = renderCameraScanBand(workingCanvas, looseCropCanvas, CAMERA_SCAN_LOOSE_BAND_HEIGHT_RATIO);
 
   if (nativeDetector) {
-    const nativeResults = normalizeBarcodeResults(await nativeDetector.detect(scanBandCanvas));
-    if (nativeResults.length) {
-      return nativeResults[0];
+    for (const canvas of [scanBandCanvas, looseScanBandCanvas]) {
+      const nativeResult = pickBestBarcodeResult(normalizeBarcodeResults(await nativeDetector.detect(canvas)));
+      if (nativeResult) {
+        return nativeResult;
+      }
     }
   }
 
-  const variants = [
-    { canvas: scanBandCanvas, label: "长条取景区" },
-    { canvas: renderRotatedCanvas(scanBandCanvas, rotatedCanvas, 90), label: "长条取景区旋转 90 度" },
-  ];
+  for (const canvas of [scanBandCanvas, looseScanBandCanvas]) {
+    const directResult = decodeCanvasWithZxing(canvas, zxing, zxingReader);
+    if (directResult) {
+      return directResult;
+    }
 
-  for (const variant of variants) {
-    const result = decodeCanvasWithZxing(variant.canvas, zxing, zxingReader);
-    if (result) {
-      return result;
+    for (const angle of [90, 270] as const) {
+      const rotatedResult = decodeCanvasWithZxing(renderRotatedCanvas(canvas, rotatedCanvas, angle), zxing, zxingReader);
+      if (rotatedResult) {
+        return rotatedResult;
+      }
     }
   }
 
   return null;
 }
 
-function drawVideoToCanvas(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
+async function openPreferredCameraStream() {
+  const cameraAttempts: MediaStreamConstraints[] = [
+    {
+      audio: false,
+      video: {
+        facingMode: {
+          ideal: "environment",
+        },
+        width: {
+          ideal: 1920,
+        },
+        height: {
+          ideal: 1080,
+        },
+        frameRate: {
+          ideal: 30,
+          max: 30,
+        },
+      },
+    },
+    {
+      audio: false,
+      video: {
+        facingMode: "environment",
+        width: {
+          ideal: 1280,
+        },
+        height: {
+          ideal: 720,
+        },
+      },
+    },
+    {
+      audio: false,
+      video: {
+        facingMode: "environment",
+      },
+    },
+    {
+      audio: false,
+      video: true,
+    },
+  ];
+
+  let lastError: unknown = null;
+
+  for (const constraints of cameraAttempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(getCameraScannerUnsupportedMessage());
+}
+
+function drawVisibleVideoFrameToCanvas(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
   const sourceWidth = video.videoWidth;
   const sourceHeight = video.videoHeight;
-  const maxSide = 1280;
-  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
-  const width = Math.max(1, Math.round(sourceWidth * scale));
-  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const containerWidth = video.clientWidth || video.parentElement?.clientWidth || sourceWidth;
+  const containerHeight = video.clientHeight || video.parentElement?.clientHeight || sourceHeight;
+  const targetAspect = containerWidth > 0 && containerHeight > 0 ? containerWidth / containerHeight : sourceWidth / sourceHeight;
+  const sourceAspect = sourceWidth / sourceHeight;
+
+  let sx = 0;
+  let sy = 0;
+  let sw = sourceWidth;
+  let sh = sourceHeight;
+
+  if (sourceAspect > targetAspect) {
+    sw = Math.round(sourceHeight * targetAspect);
+    sx = Math.floor((sourceWidth - sw) / 2);
+  } else if (sourceAspect < targetAspect) {
+    sh = Math.round(sourceWidth / targetAspect);
+    sy = Math.floor((sourceHeight - sh) / 2);
+  }
+
+  const scale = Math.min(1, CAMERA_VISIBLE_FRAME_MAX_SIDE / Math.max(sw, sh));
+  const width = Math.max(1, Math.round(sw * scale));
+  const height = Math.max(1, Math.round(sh * scale));
   canvas.width = width;
   canvas.height = height;
 
@@ -304,12 +376,12 @@ function drawVideoToCanvas(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
     throw new Error("当前浏览器无法处理扫码画面。");
   }
 
-  context.drawImage(video, 0, 0, width, height);
+  context.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
 }
 
-function renderCameraScanBand(source: HTMLCanvasElement, target: HTMLCanvasElement) {
+function renderCameraScanBand(source: HTMLCanvasElement, target: HTMLCanvasElement, heightRatio: number) {
   const cropWidth = Math.floor(source.width * CAMERA_SCAN_BAND_WIDTH_RATIO);
-  const cropHeight = Math.floor(source.height * CAMERA_SCAN_BAND_HEIGHT_RATIO);
+  const cropHeight = Math.floor(source.height * heightRatio);
   const sx = Math.floor((source.width - cropWidth) / 2);
   const sy = Math.floor((source.height - cropHeight) / 2);
   target.width = cropWidth;
@@ -409,23 +481,34 @@ function renderImageToCanvas(image: HTMLImageElement) {
 }
 
 function decodeCanvasWithZxing(canvas: HTMLCanvasElement, zxing: ZxingModule, reader: unknown): BarcodeScanResult | null {
-  try {
-    const luminanceSource = new zxing.HTMLCanvasElementLuminanceSource(canvas);
-    const binaryBitmap = new zxing.BinaryBitmap(new zxing.HybridBinarizer(luminanceSource));
-    const decoded = (reader as { decode: (bitmap: unknown) => { text?: string; format?: unknown } }).decode(binaryBitmap);
-    const text = decoded.text?.trim();
+  const luminanceSource = new zxing.HTMLCanvasElementLuminanceSource(canvas);
+  const binarizers: unknown[] = [new zxing.HybridBinarizer(luminanceSource)];
+  const GlobalHistogramBinarizer = (zxing as unknown as { GlobalHistogramBinarizer?: new (source: unknown) => unknown }).GlobalHistogramBinarizer;
 
-    if (!text) {
-      return null;
-    }
-
-    return {
-      text,
-      format: formatZxingBarcodeKind(decoded.format, zxing),
-    };
-  } catch {
-    return null;
+  if (GlobalHistogramBinarizer) {
+    binarizers.push(new GlobalHistogramBinarizer(luminanceSource));
   }
+
+  for (const binarizer of binarizers) {
+    try {
+      const binaryBitmap = new (zxing.BinaryBitmap as unknown as new (value: unknown) => unknown)(binarizer);
+      const decoded = (reader as { decode: (bitmap: unknown) => ZxingResultLike }).decode(binaryBitmap);
+      const text = (decoded.text ?? decoded.getText?.())?.trim();
+
+      if (!text) {
+        continue;
+      }
+
+      return {
+        text,
+        format: formatZxingBarcodeKind(decoded.format ?? decoded.getBarcodeFormat?.(), zxing),
+      };
+    } catch {
+      // Some 1D labels decode better with histogram thresholding, so keep trying.
+    }
+  }
+
+  return null;
 }
 
 function createZxingReader(zxing: ZxingModule) {
@@ -539,6 +622,37 @@ function dedupeBarcodeResults(results: BarcodeScanResult[]) {
   }
 
   return Array.from(deduped.values());
+}
+
+function pickBestBarcodeResult(results: BarcodeScanResult[]) {
+  return [...results].sort((left, right) => scoreBarcodeResult(right) - scoreBarcodeResult(left))[0] ?? null;
+}
+
+function scoreBarcodeResult(result: BarcodeScanResult) {
+  const text = result.text.trim();
+  let score = 0;
+
+  if (/[a-z]/iu.test(text) && /\d/u.test(text)) {
+    score += 80;
+  }
+
+  if (/^[A-Z0-9\-_/().]+$/iu.test(text)) {
+    score += 30;
+  }
+
+  if (text.length >= 8 && text.length <= 28) {
+    score += 24;
+  }
+
+  if (/^\d+$/u.test(text)) {
+    score -= 16;
+  }
+
+  if (/qr/iu.test(result.format ?? "")) {
+    score -= 24;
+  }
+
+  return score;
 }
 
 function applyTrackOptimizations(stream: MediaStream) {

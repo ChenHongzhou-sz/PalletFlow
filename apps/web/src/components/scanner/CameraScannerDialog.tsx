@@ -176,7 +176,7 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
     const timer = window.setTimeout(() => {
       setCameraStatusText((current) =>
         current === "正在识别中间长条区域，成功后只回填前 14 位。"
-          ? "把目标条码单独放进中间亮框，旁边其它条码尽量不要进入亮框。"
+          ? "把目标条码单独放进中间亮框，靠近一点，旁边其它条码尽量不要进入亮框。"
           : current,
       );
     }, 2200);
@@ -341,11 +341,11 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
         {mode === "camera" ? (
           <>
             <div className="mt-4 shrink-0 overflow-hidden rounded-[1.75rem] bg-slate-950">
-              <div className="relative aspect-[22/9] w-full bg-slate-900">
+              <div className="relative aspect-video w-full bg-slate-900">
                 <div ref={previewRef} className="pf-scanner-preview h-full w-full" />
                 {!cameraError ? (
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <div className="relative h-[58%] w-[92%] rounded-[1.25rem] border-2 border-dashed border-white/90 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.34)]">
+                    <div className="relative h-[42%] w-[92%] rounded-[1.25rem] border-2 border-dashed border-white/90 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.34)]">
                       <div className="absolute inset-x-5 top-1/2 border-t-2 border-ember/90 shadow-[0_0_18px_rgba(245,158,11,0.65)]" />
                       <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-slate-950/70 px-3 py-1 text-[11px] font-semibold text-white">
                         只扫此长条区域
@@ -355,7 +355,7 @@ export function CameraScannerDialog({ open, onClose, onDetected }: CameraScanner
                 ) : null}
               </div>
             </div>
-            <p className="mt-3 text-xs leading-6 text-slate-500">一维码建议让整段黑线完整进入亮框内。画面里条码多时，只让目标条码穿过中间橙色线。</p>
+            <p className="mt-3 text-xs leading-6 text-slate-500">一维码建议让整段黑线完整进入亮框内。iPhone 上如果条码很小，请靠近一点，让条码横向穿过中间橙色线。</p>
 
             <div className="mt-4 rounded-[1.5rem] bg-slate-100 px-4 py-3 text-sm text-slate-600">
               <p>{cameraStatusText}</p>
