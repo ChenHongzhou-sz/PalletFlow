@@ -97,29 +97,20 @@ export async function startCameraBarcodeScanner({
     throw new Error(getCameraScannerUnsupportedMessage());
   }
 
-  const [zxing, nativeFormats] = await Promise.all([loadZxingModule(), getSupportedNativeBarcodeFormats()]);
-  const nativeDetector = createNativeBarcodeDetector(nativeFormats);
-  const zxingReader = createZxingReader(zxing);
-
-  const stream = await openPreferredCameraStream();
-
-  const video = document.createElement("video");
-  video.autoplay = true;
-  video.muted = true;
-  video.playsInline = true;
-  video.className = "h-full w-full object-cover";
-  video.setAttribute("aria-label", "Camera preview");
-  video.setAttribute("playsinline", "true");
-  video.setAttribute("webkit-playsinline", "true");
-  video.srcObject = stream;
-
-  container.replaceChildren(video);
-  applyTrackOptimizations(stream);
-
+  const { stream, video } = await openPreferredCameraPreview(container);
+  let zxing: ZxingModule;
+  let nativeDetector: NativeBarcodeDetector | null;
+  let zxingReader: unknown;
   try {
-    await video.play();
+    const [loadedZxing, nativeFormats] = await Promise.all([loadZxingModule(), getSupportedNativeBarcodeFormats()]);
+    zxing = loadedZxing;
+    nativeDetector = createNativeBarcodeDetector(nativeFormats);
+    zxingReader = createZxingReader(zxing);
+    applyTrackOptimizations(stream);
   } catch (error) {
     stopMediaStream(stream);
+    video.pause();
+    video.srcObject = null;
     container.replaceChildren();
     throw error;
   }
@@ -285,7 +276,7 @@ async function scanVideoFrame({
   return null;
 }
 
-async function openPreferredCameraStream() {
+async function openPreferredCameraPreview(container: HTMLElement) {
   const cameraAttempts: MediaStreamConstraints[] = [
     {
       audio: false,
@@ -332,14 +323,92 @@ async function openPreferredCameraStream() {
   let lastError: unknown = null;
 
   for (const constraints of cameraAttempts) {
+    let stream: MediaStream | null = null;
+    let video: HTMLVideoElement | null = null;
+
     try {
-      return await navigator.mediaDevices.getUserMedia(constraints);
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video = createCameraVideoElement(stream);
+      container.replaceChildren(video);
+      await waitForPlayableVideo(video);
+
+      return {
+        stream,
+        video,
+      };
     } catch (error) {
       lastError = error;
+      if (stream) {
+        stopMediaStream(stream);
+      }
+
+      if (video) {
+        video.pause();
+        video.srcObject = null;
+      }
+
+      container.replaceChildren();
     }
   }
 
   throw lastError instanceof Error ? lastError : new Error(getCameraScannerUnsupportedMessage());
+}
+
+function createCameraVideoElement(stream: MediaStream) {
+  const video = document.createElement("video");
+  video.autoplay = true;
+  video.muted = true;
+  video.defaultMuted = true;
+  video.playsInline = true;
+  video.className = "h-full w-full object-cover";
+  video.setAttribute("aria-label", "Camera preview");
+  video.setAttribute("autoplay", "true");
+  video.setAttribute("muted", "true");
+  video.setAttribute("playsinline", "true");
+  video.setAttribute("webkit-playsinline", "true");
+  video.srcObject = stream;
+  return video;
+}
+
+async function waitForPlayableVideo(video: HTMLVideoElement) {
+  await video.play();
+
+  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("摄像头已授权，但没有拿到可显示的画面。"));
+    }, 2200);
+
+    const handleReady = () => {
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+        cleanup();
+        resolve();
+      }
+    };
+
+    const handleError = () => {
+      cleanup();
+      reject(new Error("摄像头画面启动失败，请刷新页面后重试。"));
+    };
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      video.removeEventListener("loadedmetadata", handleReady);
+      video.removeEventListener("canplay", handleReady);
+      video.removeEventListener("playing", handleReady);
+      video.removeEventListener("error", handleError);
+    };
+
+    video.addEventListener("loadedmetadata", handleReady);
+    video.addEventListener("canplay", handleReady);
+    video.addEventListener("playing", handleReady);
+    video.addEventListener("error", handleError);
+    handleReady();
+  });
 }
 
 function drawVisibleVideoFrameToCanvas(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
